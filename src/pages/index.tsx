@@ -1,9 +1,12 @@
 import type { NextPage } from "next";
 import Head from "next/head";
 import { trpc } from "../utils/trpc";
+import { getForVote } from "./getRandomHero";
 
 const Home: NextPage = () => {
+  
   const hello = trpc.useQuery(["example.hello", { text: "from Aryan Kumar" }]);
+  const [id1, id2] = getForVote();
 
   return (
     <>
@@ -13,15 +16,17 @@ const Home: NextPage = () => {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
+      {hello.data ? <p>{hello.data.greeting}</p> : <p>loading</p>}
+
       <div className="h-screen w-screen flex flex-col justify-center">
         <div className="text-2xl text-center"> Which Hero do you Like More? </div>
         
         <div className="p-3" />
         
         <div className="border rounded p-8 flex justify-between"> 
-          <div className="w-16 h-16 bg-red-200" />
+          <div className="w-16 h-16 bg-red-200"> {id1} </div>
           <div className="p-8"> vs </div>
-          <div className= "w-16 h-16 bg-red-200"/>
+          <div className= "w-16 h-16 bg-red-200"> {id2} </div>
         </div>
       </div>
       
