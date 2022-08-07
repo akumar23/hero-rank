@@ -2,14 +2,8 @@ import type { NextPage } from "next";
 import Head from "next/head";
 import { trpc } from "../utils/trpc";
 
-type TechnologyCardProps = {
-  name: string;
-  description: string;
-  documentation: string;
-};
-
 const Home: NextPage = () => {
-  const hello = trpc.useQuery(["example.hello", { text: "from tRPC" }]);
+  const hello = trpc.useQuery(["example.hello", { text: "from Aryan Kumar" }]);
 
   return (
     <>
@@ -19,34 +13,19 @@ const Home: NextPage = () => {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className="container mx-auto flex flex-col items-center justify-center min-h-screen p-4">
-        Hello
-        <div className="pt-6 text-2xl text-blue-500 flex justify-center items-center w-full">
-          {hello.data ? <p>{hello.data.greeting}</p> : <p>Loading..</p>}
+      <div className="h-screen w-screen flex flex-col justify-center">
+        <div className="text-2xl text-center"> Which Hero do you Like More? </div>
+        
+        <div className="p-3" />
+        
+        <div className="border rounded p-8 flex justify-between"> 
+          <div className="w-16 h-16 bg-red-200" />
+          <div className="p-8"> vs </div>
+          <div className= "w-16 h-16 bg-red-200"/>
         </div>
-      </main>
+      </div>
+      
     </>
-  );
-};
-
-const TechnologyCard = ({
-  name,
-  description,
-  documentation,
-}: TechnologyCardProps) => {
-  return (
-    <section className="flex flex-col justify-center p-6 duration-500 border-2 border-gray-500 rounded shadow-xl motion-safe:hover:scale-105">
-      <h2 className="text-lg text-gray-700">{name}</h2>
-      <p className="text-sm text-gray-600">{description}</p>
-      <a
-        className="mt-3 text-sm underline text-violet-500 decoration-dotted underline-offset-2"
-        href={documentation}
-        target="_blank"
-        rel="noreferrer"
-      >
-        Documentation
-      </a>
-    </section>
   );
 };
 
