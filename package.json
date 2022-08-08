@@ -9,6 +9,7 @@
     "lint": "next lint",
     "postinstall": "prisma generate"
   },
+  "proxy": "https://superheroapi.com/api/2422583714549928",
   "dependencies": {
     "@prisma/client": "^4.1.1",
     "@trpc/client": "^9.26.2",

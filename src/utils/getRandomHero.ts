@@ -11,7 +11,7 @@ number = ( notThisOne) => {
     return getRandomHero(notThisOne);
 };
 
-export const getForVote = () => {
+export const getForVote = ():number[] => {
     const firstId = getRandomHero();
     const secondId = getRandomHero(firstId);
 

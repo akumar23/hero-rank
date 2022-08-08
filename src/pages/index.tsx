@@ -6,9 +6,17 @@ import {useEffect, useMemo, useState} from 'react';
 
 export default function Home () {
   
-  const [ids, updateId] = useState(() => getForVote());
+  var [id1, id2]:number[] = [0, 0];
   
-  const[id1, id2] = ids;
+  const [ids, updateId] = useState(() => getForVote());
+
+  [id1, id2] = ids;
+
+  const firstHero = trpc.useQuery(["get-hero-by-id", {id: id1}]);
+  const secondHero = trpc.useQuery(["get-hero-by-id", {id: id2}]); 
+
+  console.log(firstHero.data);
+  console.log(secondHero.data);
 
   return (
     <>
