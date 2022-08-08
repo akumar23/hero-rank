@@ -9,11 +9,11 @@ number = ( notThisOne) => {
         return heroNum;
     }
     return getRandomHero(notThisOne);
-}
+};
 
 export const getForVote = () => {
     const firstId = getRandomHero();
     const secondId = getRandomHero(firstId);
 
     return [firstId, secondId];
-}
+};

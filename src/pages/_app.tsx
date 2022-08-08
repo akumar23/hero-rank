@@ -4,20 +4,21 @@ import type { AppRouter } from "../server/router";
 import type { AppType } from "next/dist/shared/lib/utils";
 import superjson from "superjson";
 import "../styles/globals.css";
+import 'tailwindcss/tailwind.css';
+import { AppProps } from "next/app";
+import exp from "constants";
 
-const MyApp: AppType = ({ Component, pageProps }) => {
+function MyApp ({ Component, pageProps }: AppProps) {
   return <Component {...pageProps} />;
-};
+     
+}
 
-const getBaseUrl = () => {
-  if (typeof window !== "undefined") {
-    return "";
-  }
+function getBaseUrl() {
   if (process.browser) return ""; // Browser should use current path
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`; // SSR should use vercel url
 
   return `http://localhost:${process.env.PORT ?? 3000}`; // dev SSR should use localhost
-};
+}
 
 export default withTRPC<AppRouter>({
   config({ ctx }) {
@@ -29,7 +30,6 @@ export default withTRPC<AppRouter>({
 
     return {
       url,
-      transformer: superjson,
       /**
        * @link https://react-query.tanstack.com/reference/QueryClient
        */
