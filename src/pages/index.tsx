@@ -3,6 +3,7 @@ import Head from "next/head";
 import { trpc } from "../utils/trpc";
 import { getForVote } from "../utils/getRandomHero";
 import {useEffect, useMemo, useState} from 'react';
+import axios from "axios";
 
 export default function Home () {
   
@@ -12,11 +13,27 @@ export default function Home () {
 
   [id1, id2] = ids;
 
-  const firstHero = trpc.useQuery(["get-hero-by-id", {id: id1}]);
-  const secondHero = trpc.useQuery(["get-hero-by-id", {id: id2}]); 
+  if (id1 !== undefined && id2 !== undefined) {
+    const firstHero = trpc.useQuery(["get-hero-by-id", {id: id1}]);
+    const secondHero = trpc.useQuery(["get-hero-by-id", {id: id2}]); 
 
-  console.log(firstHero.data);
-  console.log(secondHero.data);
+    var data1 = firstHero.data;
+    var data2 = secondHero.data;
+
+    console.log(data1);
+    console.log(data2);
+
+    /*
+    if (data1 !== undefined && data2 !== undefined) {
+      var hero1 = JSON.parse(JSON.stringify(data1));
+      var hero2 = JSON.parse(data2);
+    
+      console.log(hero1.name);
+      console.log(hero2.image);
+    }
+    */
+
+  }
 
   return (
     <>
