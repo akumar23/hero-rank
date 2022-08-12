@@ -3,7 +3,6 @@ import Head from "next/head";
 import { trpc } from "../utils/trpc";
 import { getForVote } from "../utils/getRandomHero";
 import {useEffect, useMemo, useState} from 'react';
-import axios from "axios";
 
 export default function Home () {
   
