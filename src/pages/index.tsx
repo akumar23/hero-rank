@@ -1,8 +1,6 @@
-import type { NextPage } from "next";
-import Head from "next/head";
 import { trpc } from "../utils/trpc";
 import { getForVote } from "../utils/getRandomHero";
-import {useEffect, useMemo, useState} from 'react';
+import {useState} from 'react';
 
 export default function Home () {
   
@@ -33,20 +31,22 @@ export default function Home () {
   return (
     <>
 
-      <div className="h-screen w-screen flex flex-col justify-center">
-        <div className="text-2xl text-center"> Which Character do you Like More? </div>
-        
-        <div className="p-3" />
-        
-        <div className="border rounded p-20 flex justify-between"> 
-          <div className="w-16 h-16 bg-red-200"> 
+      <div className="h-screen w-screen flex flex-col justify-center items-center">
+        <div className="text-2xl text-center"> Which Character do you Like More? </div>       
+        <div className="p-2" />
+        <div className="border rounded p-8 flex items-center"> 
+          <div className="w-25 h-30"> 
             <img src={hero1Url} />
-            <div> {hero1Name} </div>
+            <div className="text-xl text-center capitalize"> 
+              {hero1Name} 
+            </div>
           </div>
-          <div className="p-8"> vs </div>
-          <div className= "w-16 h-16 bg-red-200">
+          <div className="p-20"> vs </div>
+          <div className= "w-25 h-30">
             <img src={hero2Url} />
-            <div> {hero2Name} </div>
+            <div className="text-xl text-center capitalize"> 
+              {hero2Name} 
+            </div>
           </div>
         </div>
       </div>

@@ -1,8 +1,6 @@
 // src/server/router/index.ts
-import superjson from "superjson";
 import * as trpc from "@trpc/server";
 import {z} from "zod";
-import axios from "axios";
 
 export const appRouter = trpc.router().query("get-hero-by-id", {
   input: z.object({id: z.number()}),
