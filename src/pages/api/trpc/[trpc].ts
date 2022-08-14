@@ -1,6 +1,6 @@
 // src/pages/api/trpc/[trpc].ts
 import { createNextApiHandler } from "@trpc/server/adapters/next";
-import { appRouter, AppRouter } from "../../../server/router";
+import { appRouter, AppRouter } from "../../../backend/router";
 import * as trpcNext from "@trpc/server/adapters/next"
 import { inferProcedureOutput } from "@trpc/server";
 // export API handler

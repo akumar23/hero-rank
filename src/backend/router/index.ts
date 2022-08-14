@@ -16,12 +16,12 @@ export const appRouter = trpc.router().query("get-hero-by-id", {
     votedAgainst: z.number(),
   }),
   async resolve({input}) {
-    const voteDB = await prisma.vote.create ({
+    const voteInDb = await prisma.vote.create({
       data: {
-        ...input,
+        ...input
       },
     });
-    return {sucess: true, vote: voteDB};
+    return { success: true, vote: voteInDb };
   },
 });
 

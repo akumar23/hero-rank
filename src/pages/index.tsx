@@ -36,7 +36,14 @@ export default function Home () {
 
   }
 
+  const voteMutate = trpc.useMutation(["cast-vote"]);
+
   const vote = (select: number) => {
+    if (select == first) {
+      voteMutate.mutate({votedFor: first, votedAgainst: second});
+    } else {
+      voteMutate.mutate({votedFor: second, votedAgainst: first})    
+    }
     updateId(getForVote());
   }
 
