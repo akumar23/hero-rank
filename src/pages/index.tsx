@@ -1,17 +1,22 @@
 import { trpc } from "../utils/trpc";
 import { getForVote } from "../utils/getRandomHero";
 import {useState} from 'react';
+import { inferQueryResponse } from "./api/trpc/[trpc]";
 
 export default function Home () {
   
   var [id1, id2]:number[] = [0, 0];
-  
+  const btn = "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded align-center";
+
   const [ids, updateId] = useState(() => getForVote());
 
   [id1, id2] = ids;
 
   var hero1Url = "test";
   var hero2Url = "test2";
+
+  var first = 0;
+  var second = 0;
 
   var hero1Name = " ";
   var hero2Name = " ";
@@ -26,6 +31,13 @@ export default function Home () {
     hero1Name = firstHero.data?.name;
     hero2Name = secondHero.data?.name;
 
+    first = id1;
+    second = id2;
+
+  }
+
+  const vote = (select: number) => {
+    updateId(getForVote());
   }
 
   return (
@@ -37,16 +49,12 @@ export default function Home () {
         <div className="border rounded p-8 flex items-center"> 
           <div className="w-25 h-30"> 
             <img src={hero1Url} />
-            <div className="text-xl text-center capitalize"> 
-              {hero1Name} 
-            </div>
+            <button className={btn} onClick={() => vote(first)}> {hero1Name} </button>
           </div>
           <div className="p-20"> vs </div>
           <div className= "w-25 h-30">
             <img src={hero2Url} />
-            <div className="text-xl text-center capitalize"> 
-              {hero2Name} 
-            </div>
+            <button className={btn} onClick={() => vote(second)}> {hero2Name} </button>
           </div>
         </div>
       </div>

@@ -8,8 +8,14 @@ generator client {
 datasource db {
     provider = "mysql"
     url      = env("DATABASE_URL")
+    shadowDatabaseUrl = env("SHADOW_URL")
 }
 
-model Example {
+model Vote {
     id String @id @default(cuid())
+    createdAt DateTime @default(now())
+
+    votedFor Int
+    votedAgainst Int
+
 }
