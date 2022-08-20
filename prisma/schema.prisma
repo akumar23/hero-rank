@@ -14,26 +14,11 @@ datasource db {
 }
 
 model Vote {
+
     id String @id @default(cuid())
     createdAt DateTime @default(now())
-
-    votedFor        Hero @relation(name: "votesFor", fields: [votedForId], references: [id])
-    votedForId      Int
-    votedAgainst    Hero @relation(name: "votesAgainst", fields: [votedAgainstId], references: [id])
-    votedAgainstId  Int
-
-    @@index([votedForId])
-    @@index([votedAgainstId])
-
-}
-
-model Hero {
-
-    id Int @id
-
-    name        String
-    url         String 
-    VoteFor     Vote[] @relation("votesFor")
-    VoteAgainst Vote[] @relation("votesAgainst")
+    
+    votedFor Int
+    votedAgainst Int
 
 }
