@@ -2,6 +2,7 @@ import { trpc } from "../utils/trpc";
 import { getForVote } from "../utils/getRandomHero";
 import {useState} from 'react';
 import { inferQueryResponse } from "./api/trpc/[trpc]";
+import Image from "next/image";
 
 export default function Home () {
   
