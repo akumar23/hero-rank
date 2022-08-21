@@ -5,20 +5,33 @@ import { trpc } from "../utils/trpc";
 import Image from "next/image";
 import Head from "next/head";
 
+
 const getVotes = async () => {
     const votesOrdered = await prisma.vote.findMany();
-    
+
     votesOrdered.sort(function(a,b) {
         return a.votedFor-b.votedFor;
     });
     
+
     return votesOrdered;
     
 };
 
 type VoteRes = AsyncReturnType<typeof getVotes>;
 
-const Listing: React.FC< { vote: VoteRes[number] }> = (props) => {
+const generateCountPercent = (vote: VoteRes[number]) => {
+    
+    const VoteFor = vote.votedFor;
+    const VoteAgainst = vote.votedAgainst;
+
+    if (VoteFor + VoteAgainst === 0) {
+      return 0;
+    }
+    return (VoteFor / (VoteFor + VoteAgainst)) * 100;
+  };
+
+const Listing: React.FC<{ vote: VoteRes[number] }> = (props) => {
 
     const hero = trpc.useQuery(["get-hero-by-id", {id: props.vote.votedFor}]);
     const heroUrl = hero.data?.image.url;
@@ -37,12 +50,28 @@ const Results: React.FC<{
     votes: VoteRes
 }> = (props) => {
     return (
-        <div className="flex flex-col">
-            <h1> Results </h1>
-            <br></br>
-            {props.votes.map((currentVote, index) => {
-                return <Listing vote={currentVote} key={index} />;
-            })}
+        <div className="flex flex-col items-center">
+            <Head>
+                <title> Results </title>
+            </Head>
+
+            <h2 className="text-2xl p-4"> Results </h2>
+            <div className="flex flex-col w-full max-w-2xl border">
+                <br></br>
+                {props.votes
+                    .sort((a,b) => {
+                        const diff = generateCountPercent(b) - generateCountPercent(a);
+
+                        if (diff === 0) {
+                            return b.votedFor - a.votedFor;
+                        }
+
+                        return diff;
+                    })
+                    .map((currentVote, index) => {
+                    return <Listing vote={currentVote} key={index} />;
+                })}
+            </div>
         </div>
 
     );
@@ -54,6 +83,5 @@ export const getStaticProps: GetServerSideProps = async () => {
     
     const votesOrdered = await getVotes();
 
-    console.log("votes:", votesOrdered)
     return {props: {votes: JSON.parse(JSON.stringify(votesOrdered))}, revalidate: 60};
 };
