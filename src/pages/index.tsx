@@ -3,6 +3,7 @@ import { getForVote } from "../utils/getRandomHero";
 import {useState} from 'react';
 import { inferQueryResponse } from "./api/trpc/[trpc]";
 import Image from "next/image";
+import Link from "next/link";
 
 export default function Home () {
   
@@ -65,8 +66,11 @@ export default function Home () {
             <button className={btn} onClick={() => vote(second)}> {hero2Name} </button>
           </div>
         </div>
+        <Link href="/results">
+          <button className={btn}> View Results</button>
+        </Link>
       </div>
-      
+
     </>
   );
 }
