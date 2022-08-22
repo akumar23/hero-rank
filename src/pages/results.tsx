@@ -34,7 +34,13 @@ const generateCountPercent = (vote: VoteRes[number]) => {
 const Listing: React.FC<{ vote: VoteRes[number] }> = (props) => {
 
     const hero = trpc.useQuery(["get-hero-by-id", {id: props.vote.votedFor}]);
-    const heroUrl = hero.data?.image.url;
+
+    var heroUrl;
+    if (hero.data?.image.url == undefined) {
+        heroUrl = "https://media.wired.com/photos/592722c1af95806129f51b71/master/pass/MIT-Web-Loading.jpg";
+    } else {
+        heroUrl = hero.data?.image.url;
+    }
 
     return (
         <>
