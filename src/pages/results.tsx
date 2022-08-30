@@ -36,7 +36,7 @@ const Listing: React.FC<{ vote: VoteRes[number] }> = (props) => {
     const hero = trpc.useQuery(["get-hero-by-id", {id: props.vote.votedFor}]);
 
     var heroUrl;
-    if (hero.data?.image.url != undefined) {
+    if (hero.data != undefined && hero.data?.image.url != undefined) {
         heroUrl = hero.data?.image.url;
     }
 
