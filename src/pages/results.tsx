@@ -4,7 +4,7 @@ import { AsyncReturnType } from "../utils/ts-bs";
 import { trpc } from "../utils/trpc";
 import Image from "next/image";
 import Head from "next/head";
-
+import thumbLoad from '../../public/loading.png'
 
 const getVotes = async () => {
     const votesOrdered = await prisma.vote.findMany();
@@ -36,9 +36,7 @@ const Listing: React.FC<{ vote: VoteRes[number] }> = (props) => {
     const hero = trpc.useQuery(["get-hero-by-id", {id: props.vote.votedFor}]);
 
     var heroUrl;
-    if (hero.data?.image.url == undefined) {
-        heroUrl = "https://media.wired.com/photos/592722c1af95806129f51b71/master/pass/MIT-Web-Loading.jpg";
-    } else {
+    if (hero.data?.image.url != undefined) {
         heroUrl = hero.data?.image.url;
     }
 
