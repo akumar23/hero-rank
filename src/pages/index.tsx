@@ -5,6 +5,10 @@ import { inferQueryResponse } from "./api/trpc/[trpc]";
 import Image from "next/image";
 import Link from "next/link";
 
+function refreshPage(){
+  window.location.reload();
+} 
+
 export default function Home () {
   
   var [id1, id2]:number[] = [0, 0];
@@ -66,6 +70,8 @@ export default function Home () {
             <button className={btn} onClick={() => vote(second)}> {hero2Name} </button>
           </div>
         </div>
+
+        <button className={btn} onClick={()=> {refreshPage();}}> Get New Characters</button>
         <Link href="/results">
           <button className={btn}> View Results</button>
         </Link>
