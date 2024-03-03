@@ -71,10 +71,16 @@ export default function Home () {
           </div>
         </div>
 
+        <br></br>
+        
         <button className={btn} onClick={()=> {refreshPage();}}> Get New Characters</button>
+        
+        <br></br>
+
         <Link href="/results">
           <button className={btn}> View Results</button>
         </Link>
+        
       </div>
 
     </>
