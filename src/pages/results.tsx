@@ -53,6 +53,22 @@ const Listing: React.FC<{ vote: VoteRes[number] }> = (props) => {
 const Results: React.FC<{
     votes: VoteRes
 }> = (props) => {
+
+    const rankedVotes = props.votes
+    .sort((a, b) => {
+        const diff = generateCountPercent(b) - generateCountPercent(a);
+
+        if (diff === 0) {
+            return b.votedFor - a.votedFor;
+        }
+
+        return diff;
+    })
+    .map((vote, index) => ({
+        ...vote,
+        rank: index + 1,
+    }));
+
     return (
         <div className="flex flex-col items-center">
             <Head>
@@ -62,19 +78,9 @@ const Results: React.FC<{
             <h2 className="text-2xl p-4"> Results </h2>
             <div className="flex flex-col w-full max-w-2xl border">
                 <br></br>
-                {props.votes
-                    .sort((a,b) => {
-                        const diff = generateCountPercent(b) - generateCountPercent(a);
-
-                        if (diff === 0) {
-                            return b.votedFor - a.votedFor;
-                        }
-
-                        return diff;
-                    })
-                    .map((currentVote, index) => {
-                    return <Listing vote={currentVote} key={index} />;
-                })}
+                {rankedVotes.map((currentVote) => (
+                    <Listing vote={currentVote} key={currentVote.rank} />
+                ))}
             </div>
         </div>
 
