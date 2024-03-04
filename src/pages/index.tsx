@@ -4,6 +4,7 @@ import {useState} from 'react';
 import { inferQueryResponse } from "./api/trpc/[trpc]";
 import Image from "next/image";
 import Link from "next/link";
+import { BackgroundBeams } from "../components/ui/background-beams";
 
 function refreshPage(){
   window.location.reload();
@@ -12,7 +13,7 @@ function refreshPage(){
 export default function Home () {
   
   var [id1, id2]:number[] = [0, 0];
-  const btn = "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded align-center";
+  const btn = "hover:bg-blue-700 text-white font-bold py-2 px-4 rounded align-center font-sans";
 
   const [ids, updateId] = useState(() => getForVote());
 
@@ -55,17 +56,17 @@ export default function Home () {
 
   return (
     <>
-
+      <BackgroundBeams />
       <div className="h-screen w-screen flex flex-col justify-center items-center">
-        <div className="text-2xl text-center"> Which Character do you Like More? </div>       
+        {/* <div className="text-2xl text-center"> Which Character do you Like More? </div>        */}
         <div className="p-2" />
-        <div className="border rounded p-8 flex items-center"> 
-          <div className="w-25 h-30"> 
+        <div className="p-8 flex items-center rounded-[9999px] shadow-[0_0_0_1px_#ffffff10]"> 
+          <div className="w-55 h-50"> 
             <img src={hero1Url} />
             <button className={btn} onClick={() => vote(first)}> {hero1Name} </button>
           </div>
           <div className="p-20"> vs </div>
-          <div className= "w-25 h-30">
+          <div className= "w-55 h-50">
             <img src={hero2Url} />
             <button className={btn} onClick={() => vote(second)}> {hero2Name} </button>
           </div>
