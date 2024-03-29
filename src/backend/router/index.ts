@@ -2,6 +2,9 @@
 import * as trpc from "@trpc/server";
 import {z} from "zod";
 import { prisma } from "../utils/prisma";
+import { firestore } from "../../lib/firebase";
+
+const db = firestore
 
 export const appRouter = trpc.router().query("get-hero-by-id", {
   input: z.object({id: z.number()}),
@@ -15,13 +18,15 @@ export const appRouter = trpc.router().query("get-hero-by-id", {
     votedFor: z.number(),
     votedAgainst: z.number(),
   }),
-  async resolve({input}) {
-    const voteInDb = await prisma.vote.create({
-      data: {
-        ...input
-      },
-    });
-    return { success: true, vote: voteInDb };
+  async resolve({ input }) {
+    try {
+      const voteRef = await db.collection('votes').add(input);
+      const voteDocument = await voteRef.get();
+      return { success: true, vote: voteDocument.data() };
+    } catch (error: any) {
+      console.error("Error casting vote:", error);
+      return { success: false, error: error.message };
+    }
   },
 });
 

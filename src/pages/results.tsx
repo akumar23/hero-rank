@@ -5,17 +5,22 @@ import { trpc } from "../utils/trpc";
 import Image from "next/image";
 import Head from "next/head";
 import thumbLoad from '../../public/loading.png'
+import { BackgroundBeams } from "../components/ui/background-beams";
+import { firestore } from "../lib/firebase";
+import firebase from "firebase/compat";
+
+const db = firestore
 
 const getVotes = async () => {
-    const votesOrdered = await prisma.vote.findMany();
-
-    votesOrdered.sort(function(a,b) {
-        return a.votedFor-b.votedFor;
+    const querySnapshot = await db.collection('votes').get();
+    const votes: firebase.firestore.DocumentData[] = [];
+    querySnapshot.forEach(doc => {
+        votes.push(doc.data());
     });
     
+    votes.sort((a, b) => a.votedFor - b.votedFor);
 
-    return votesOrdered;
-    
+    return votes;
 };
 
 type VoteRes = AsyncReturnType<typeof getVotes>;
@@ -42,8 +47,8 @@ const Listing: React.FC<{ vote: VoteRes[number] }> = (props) => {
 
     return (
         <>
-            <div> {hero.data?.name} </div>
-            <div className="flex border-b p-2">
+            <div className="font-sans font-bold"> {hero.data?.name} </div>
+            <div className="border-b p-2">
                 <img src={heroUrl} />
             </div>
         </>
@@ -70,19 +75,27 @@ const Results: React.FC<{
     }));
 
     return (
-        <div className="flex flex-col items-center">
-            <Head>
-                <title> Results </title>
-            </Head>
+        <>
+            
+            <div className="flex flex-col items-center">
+                <Head>
+                    <title> Results </title>
+                </Head>
 
-            <h2 className="text-2xl p-4"> Results </h2>
-            <div className="flex flex-col w-full max-w-2xl border">
-                <br></br>
+                <h2 className="text-2xl p-4"> Results </h2>
+                {/* <div className="flex-col border mt-3 grid gap-3 pt-3 md:grid-cols-5 lg:w-4/6">
+                    <br></br>
+                    {rankedVotes.map((currentVote) => (
+                        <Listing vote={currentVote} key={currentVote.rank} />
+                    ))}
+                </div> */}
+
                 {rankedVotes.map((currentVote) => (
                     <Listing vote={currentVote} key={currentVote.rank} />
                 ))}
+
             </div>
-        </div>
+        </>
 
     );
 };
