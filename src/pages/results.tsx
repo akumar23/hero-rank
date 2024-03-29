@@ -46,8 +46,8 @@ const Listing: React.FC<{ vote: VoteRes[number] }> = (props) => {
 
     return (
         <>
-            <div className="font-sans font-bold"> {hero.data?.name} </div>
             <div className="border-b p-2">
+                <div className="font-sans font-bold"> {hero.data?.name} </div>
                 <img src={heroUrl} />
             </div>
         </>
@@ -82,16 +82,15 @@ const Results: React.FC<{
                 </Head>
 
                 <h2 className="text-2xl p-4"> Results </h2>
-                {/* <div className="flex-col border mt-3 grid gap-3 pt-3 md:grid-cols-5 lg:w-4/6">
-                    <br></br>
+                <div className="flex-col border mt-3 grid gap-3 pt-3 md:grid-cols-4 lg:w-4/6">
                     {rankedVotes.map((currentVote) => (
                         <Listing vote={currentVote} key={currentVote.rank} />
                     ))}
-                </div> */}
+                </div>
 
-                {rankedVotes.map((currentVote) => (
+                {/* {rankedVotes.map((currentVote) => (
                     <Listing vote={currentVote} key={currentVote.rank} />
-                ))}
+                ))} */}
 
             </div>
         </>
