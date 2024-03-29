@@ -6,7 +6,7 @@ import Image from "next/image";
 import Head from "next/head";
 import thumbLoad from '../../public/loading.png'
 import { BackgroundBeams } from "../components/ui/background-beams";
-import { firestore } from "../lib/firebase";
+import { firestore } from "../utils/firebase";
 import firebase from "firebase/compat";
 
 const db = firestore
