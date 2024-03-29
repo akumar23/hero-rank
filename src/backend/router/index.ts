@@ -1,7 +1,6 @@
 // src/server/router/index.ts
 import * as trpc from "@trpc/server";
 import {z} from "zod";
-import { prisma } from "../utils/prisma";
 import { firestore } from "../../utils/firebase";
 
 const db = firestore
