@@ -18,20 +18,27 @@ const firebaseConfig = {
     measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Initialize Firebase
-if (!firebase.apps.length) {
+// Initialize Firebase only if API key is available (not during build without env vars)
+const isFirebaseConfigured = !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+
+if (!firebase.apps.length && isFirebaseConfigured) {
     firebase.initializeApp(firebaseConfig)
 }
 
-export const auth = firebase.auth();
-export const firestore = firebase.firestore();
-export const storage = firebase.storage();
-export const googleAuthProvider = new firebase.auth.GoogleAuthProvider();
+// Export Firebase services (will be undefined if not configured)
+export const auth = isFirebaseConfigured ? firebase.auth() : null;
+export const firestore = isFirebaseConfigured ? firebase.firestore() : null;
+export const storage = isFirebaseConfigured ? firebase.storage() : null;
+export const googleAuthProvider = isFirebaseConfigured ? new firebase.auth.GoogleAuthProvider() : null;
 export const fromMillis = firebase.firestore.Timestamp.fromMillis;
 export const serverTimestamp = firebase.firestore.FieldValue.serverTimestamp;
 export const STATE_CHANGED = firebase.storage.TaskEvent.STATE_CHANGED;
 
+// Type guard to check if Firebase is available
+export const isFirebaseAvailable = (): boolean => isFirebaseConfigured && firebase.apps.length > 0;
+
 export async function getUserWithUsername(username: any) {
+    if (!firestore) return null;
     const usersRef = firestore.collection('users');
     const query = usersRef.where('username', '==', username).limit(1);
     const currUser = (await query.get()).docs[0];
