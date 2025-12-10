@@ -156,21 +156,27 @@ export default function Home() {
 
       <div className="relative z-10">
         <div className="flex justify-center mb-4">
-          {isLoading ? (
-            <div className="w-32 h-44 bg-gray-700 animate-pulse rounded" />
-          ) : heroUrl ? (
-            <Image
-              src={heroUrl}
-              alt={heroName}
-              width={128}
-              height={176}
-              className="object-cover rounded shadow-lg"
-            />
-          ) : (
-            <div className="w-32 h-44 bg-gray-700 rounded flex items-center justify-center text-gray-500">
-              No Image
-            </div>
-          )}
+          {/* Fixed container to prevent layout shift */}
+          <div className="w-32 h-44 relative">
+            {isLoading ? (
+              <div className="w-full h-full bg-gray-700 animate-pulse rounded" />
+            ) : heroUrl ? (
+              <Image
+                src={heroUrl}
+                alt={heroName}
+                width={128}
+                height={176}
+                className="object-cover rounded shadow-lg"
+                priority
+                sizes="128px"
+                style={{ width: '100%', height: '100%' }}
+              />
+            ) : (
+              <div className="w-full h-full bg-gray-700 rounded flex items-center justify-center text-gray-500 text-xs">
+                No Image
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="text-center">
@@ -209,18 +215,6 @@ export default function Home() {
             Which hero do you like more? Click to vote!
           </p>
         </div>
-
-        {/* Achievement Badges Section */}
-        <AchievementBadges voteCount={voteCount} />
-
-        {/* Voting Streak Section */}
-        <VotingStreak streakData={streakData} />
-
-        {/* Discovery Tracker Section */}
-        <DiscoveryTracker
-          discoveredCount={discoveredCount}
-          newDiscovery={newDiscovery}
-        />
 
         {/* Voting Area */}
         <div className="flex flex-col items-center">
@@ -298,6 +292,18 @@ export default function Home() {
             </Link>
           </div>
         </div>
+
+        {/* Discovery Tracker Section */}
+        <DiscoveryTracker
+          discoveredCount={discoveredCount}
+          newDiscovery={newDiscovery}
+        />
+
+        {/* Voting Streak Section */}
+        <VotingStreak streakData={streakData} />
+
+        {/* Achievement Badges Section */}
+        <AchievementBadges voteCount={voteCount} />
       </div>
     </div>
   );

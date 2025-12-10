@@ -48,7 +48,7 @@ export const RatingChangeToast: React.FC<RatingChangeToastProps> = ({
             stiffness: 300,
             damping: 25,
           }}
-          className="fixed top-6 left-1/2 -translate-x-1/2 z-50 pointer-events-auto"
+          className="fixed top-6 right-6 z-50 pointer-events-auto"
         >
           <div className="bg-gray-800 border border-gray-700 rounded-lg shadow-2xl overflow-hidden min-w-[320px] max-w-md">
             {/* Header */}
