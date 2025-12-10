@@ -84,8 +84,8 @@ export default function Home() {
 
     const voteData =
       select === id1
-        ? { votedFor: id1, votedAgainst: id2 }
-        : { votedFor: id2, votedAgainst: id1 };
+        ? { votedFor: id1, votedAgainst: id2, votedForName: hero1Name, votedAgainstName: hero2Name }
+        : { votedFor: id2, votedAgainst: id1, votedForName: hero2Name, votedAgainstName: hero1Name };
 
     voteMutate.mutate(voteData, {
       onSuccess: (data) => {

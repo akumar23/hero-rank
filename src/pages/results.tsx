@@ -132,34 +132,9 @@ const getHeroRatings = async (): Promise<SerializedHeroRating[]> => {
         lastUpdated: data.last_updated || null,
         createdAt: data.created_at || null,
         wilsonScore: wilsonScoreValue,
-        heroName: "", // Will be populated below
+        heroName: data.hero_name || `Hero #${data.hero_id}`,
       });
     }
-
-    // Fetch all hero names in parallel
-    const heroNamePromises = ratings.map(async (rating) => {
-      try {
-        const res = await fetch(
-          `https://www.superheroapi.com/api.php/2422583714549928/${rating.heroId}`
-        );
-        const data = await res.json();
-        return { heroId: rating.heroId, name: data.name || `Hero #${rating.heroId}` };
-      } catch (error) {
-        console.error(`Error fetching hero name for ${rating.heroId}:`, error);
-        return { heroId: rating.heroId, name: `Hero #${rating.heroId}` };
-      }
-    });
-
-    const heroNames = await Promise.allSettled(heroNamePromises);
-
-    // Populate hero names
-    heroNames.forEach((result, index) => {
-      if (result.status === 'fulfilled' && ratings[index]) {
-        ratings[index]!.heroName = result.value.name;
-      } else if (ratings[index]) {
-        ratings[index]!.heroName = `Hero #${ratings[index]!.heroId}`;
-      }
-    });
 
     return ratings;
   } catch (error) {
@@ -559,10 +534,11 @@ export default Results;
 
 /**
  * Calculates dashboard statistics from hero ratings.
+ * Uses stored hero names from database - no external API calls needed.
  */
-const calculateStats = async (
+const calculateStats = (
   heroRatings: SerializedHeroRating[]
-): Promise<DashboardStats> => {
+): DashboardStats => {
   // Total votes calculation - sum of all games divided by 2 (since each vote involves 2 heroes)
   const totalVotes = Math.floor(
     heroRatings.reduce((sum, hero) => sum + hero.games, 0) / 2
@@ -583,93 +559,22 @@ const calculateStats = async (
       ? heroRatings.reduce((sum, hero) => sum + hero.rating, 0) / heroRatings.length
       : 1500;
 
-  // Fetch hero names for top heroes in parallel when they're different
-  let highestRatedHero = null;
-  let mostGamesHero = null;
-
-  // Determine which heroes need to be fetched
-  const isSameHero = mostGames && mostGames.heroId === highestRated?.heroId;
-
-  if (highestRated && mostGames && !isSameHero) {
-    // Fetch both heroes in parallel
-    const [highestRatedResult, mostGamesResult] = await Promise.allSettled([
-      fetch(`https://www.superheroapi.com/api.php/2422583714549928/${highestRated.heroId}`)
-        .then(res => res.json()),
-      fetch(`https://www.superheroapi.com/api.php/2422583714549928/${mostGames.heroId}`)
-        .then(res => res.json())
-    ]);
-
-    // Process highest rated hero
-    if (highestRatedResult.status === 'fulfilled') {
-      highestRatedHero = {
-        name: highestRatedResult.value.name || `Hero #${highestRated.heroId}`,
+  // Use stored hero names directly from database
+  const highestRatedHero = highestRated
+    ? {
+        name: highestRated.heroName,
         rating: highestRated.rating,
         heroId: highestRated.heroId,
-      };
-    } else {
-      console.error("Error fetching highest rated hero name:", highestRatedResult.reason);
-      highestRatedHero = {
-        name: `Hero #${highestRated.heroId}`,
-        rating: highestRated.rating,
-        heroId: highestRated.heroId,
-      };
-    }
+      }
+    : null;
 
-    // Process most games hero
-    if (mostGamesResult.status === 'fulfilled') {
-      mostGamesHero = {
-        name: mostGamesResult.value.name || `Hero #${mostGames.heroId}`,
+  const mostGamesHero = mostGames
+    ? {
+        name: mostGames.heroName,
         games: mostGames.games,
         heroId: mostGames.heroId,
-      };
-    } else {
-      console.error("Error fetching most games hero name:", mostGamesResult.reason);
-      mostGamesHero = {
-        name: `Hero #${mostGames.heroId}`,
-        games: mostGames.games,
-        heroId: mostGames.heroId,
-      };
-    }
-  } else if (highestRated) {
-    // Fetch only one hero (either they're the same or mostGames doesn't exist)
-    try {
-      const res = await fetch(
-        `https://www.superheroapi.com/api.php/2422583714549928/${highestRated.heroId}`
-      );
-      const data = await res.json();
-      const heroName = data.name || `Hero #${highestRated.heroId}`;
-
-      highestRatedHero = {
-        name: heroName,
-        rating: highestRated.rating,
-        heroId: highestRated.heroId,
-      };
-
-      // Reuse the same name if they're the same hero
-      if (mostGames && isSameHero) {
-        mostGamesHero = {
-          name: heroName,
-          games: mostGames.games,
-          heroId: mostGames.heroId,
-        };
       }
-    } catch (error) {
-      console.error("Error fetching highest rated hero name:", error);
-      highestRatedHero = {
-        name: `Hero #${highestRated.heroId}`,
-        rating: highestRated.rating,
-        heroId: highestRated.heroId,
-      };
-
-      if (mostGames && isSameHero) {
-        mostGamesHero = {
-          name: `Hero #${mostGames.heroId}`,
-          games: mostGames.games,
-          heroId: mostGames.heroId,
-        };
-      }
-    }
-  }
+    : null;
 
   return {
     totalVotes,
@@ -686,7 +591,7 @@ const calculateStats = async (
  */
 export const getStaticProps: GetStaticProps = async () => {
   const heroRatings = await getHeroRatings();
-  const stats = await calculateStats(heroRatings);
+  const stats = calculateStats(heroRatings);
 
   return {
     props: {

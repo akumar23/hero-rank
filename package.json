@@ -10,7 +10,9 @@
     "init-schema": "npx tsx src/migrations/init-schema.ts",
     "migrate": "npx tsx src/migrations/migrate-firebase-to-turso.ts",
     "test-turso": "npx tsx src/migrations/test-turso.ts",
-    "test-migration": "npx tsx src/migrations/test-migration.ts"
+    "test-migration": "npx tsx src/migrations/test-migration.ts",
+    "add-hero-name": "npx tsx src/migrations/add-hero-name.ts",
+    "backfill-names": "npx tsx src/migrations/backfill-hero-names.ts"
   },
   "proxy": "https://superheroapi.com/api/2422583714549928",
   "dependencies": {

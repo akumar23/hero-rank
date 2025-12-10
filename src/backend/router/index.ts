@@ -55,9 +55,16 @@ interface RatingUpdateResult {
  *
  * @param winnerId - The hero ID that won the vote
  * @param loserId - The hero ID that lost the vote
+ * @param winnerName - Optional name of the winning hero
+ * @param loserName - Optional name of the losing hero
  * @returns Rating changes for both heroes
  */
-async function updateHeroRatings(winnerId: number, loserId: number): Promise<RatingUpdateResult> {
+async function updateHeroRatings(
+  winnerId: number,
+  loserId: number,
+  winnerName?: string,
+  loserName?: string
+): Promise<RatingUpdateResult> {
   // Fetch current ratings for both heroes
   const [winnerRating, loserRating] = await Promise.all([
     getHeroRating(winnerId),
@@ -95,11 +102,13 @@ async function updateHeroRatings(winnerId: number, loserId: number): Promise<Rat
   // Update winner in Turso
   await turso.execute({
     sql: `
-      INSERT OR REPLACE INTO heroRatings 
-      (hero_id, rating, games, wins, losses, is_provisional, peak_rating, lowest_rating, win_rate, current_streak, last_updated, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      INSERT OR REPLACE INTO heroRatings
+      (hero_id, hero_name, rating, games, wins, losses, is_provisional, peak_rating, lowest_rating, win_rate, current_streak, last_updated, created_at)
+      VALUES (?, COALESCE(?, (SELECT hero_name FROM heroRatings WHERE hero_id = ?)), ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), COALESCE((SELECT created_at FROM heroRatings WHERE hero_id = ?), datetime('now')))
     `,
     args: [
+      winnerId,
+      winnerName || null,
       winnerId,
       eloResult.newWinnerRating,
       winnerNewGames,
@@ -109,18 +118,21 @@ async function updateHeroRatings(winnerId: number, loserId: number): Promise<Rat
       winnerNewPeak,
       winnerNewLowest,
       winnerWinRate,
-      winnerNewStreak
+      winnerNewStreak,
+      winnerId
     ]
   });
 
   // Update loser in Turso
   await turso.execute({
     sql: `
-      INSERT OR REPLACE INTO heroRatings 
-      (hero_id, rating, games, wins, losses, is_provisional, peak_rating, lowest_rating, win_rate, current_streak, last_updated, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      INSERT OR REPLACE INTO heroRatings
+      (hero_id, hero_name, rating, games, wins, losses, is_provisional, peak_rating, lowest_rating, win_rate, current_streak, last_updated, created_at)
+      VALUES (?, COALESCE(?, (SELECT hero_name FROM heroRatings WHERE hero_id = ?)), ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), COALESCE((SELECT created_at FROM heroRatings WHERE hero_id = ?), datetime('now')))
     `,
     args: [
+      loserId,
+      loserName || null,
       loserId,
       eloResult.newLoserRating,
       loserNewGames,
@@ -130,7 +142,8 @@ async function updateHeroRatings(winnerId: number, loserId: number): Promise<Rat
       loserNewPeak,
       loserNewLowest,
       loserWinRate,
-      loserNewStreak
+      loserNewStreak,
+      loserId
     ]
   });
 
@@ -155,6 +168,8 @@ export const appRouter = trpc.router().query("get-hero-by-id", {
   input: z.object({
     votedFor: z.number(),
     votedAgainst: z.number(),
+    votedForName: z.string().optional(),
+    votedAgainstName: z.string().optional(),
   }),
   async resolve({ input }) {
     try {
@@ -165,7 +180,12 @@ export const appRouter = trpc.router().query("get-hero-by-id", {
       });
 
       // Update Elo ratings for both heroes and get rating changes
-      const ratingUpdate = await updateHeroRatings(input.votedFor, input.votedAgainst);
+      const ratingUpdate = await updateHeroRatings(
+        input.votedFor,
+        input.votedAgainst,
+        input.votedForName,
+        input.votedAgainstName
+      );
 
       return {
         success: true,
