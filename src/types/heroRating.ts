@@ -139,6 +139,7 @@ export interface VoteDocumentWithMeta extends VoteDocument {
  */
 export interface HeroRatingState {
   heroId: number;
+  heroName?: string | null;
   rating: number;
   games: number;
   wins: number;

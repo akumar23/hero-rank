@@ -22,6 +22,7 @@ async function getHeroRating(heroId: number): Promise<HeroRatingState> {
       const data: any = result.rows[0];
       return {
         heroId: data.hero_id,
+        heroName: data.hero_name || null,
         rating: data.rating,
         games: data.games,
         wins: data.wins,
@@ -99,17 +100,20 @@ async function updateHeroRatings(
   const loserNewLowest = Math.min(loserRating.lowestRating, eloResult.newLoserRating);
   const loserWinRate = (loserRating.wins / loserNewGames) * 100;
 
+  // Determine final hero names: use provided name, fall back to existing name from DB
+  const finalWinnerName = winnerName || winnerRating.heroName || null;
+  const finalLoserName = loserName || loserRating.heroName || null;
+
   // Update winner in Turso
   await turso.execute({
     sql: `
       INSERT OR REPLACE INTO heroRatings
       (hero_id, hero_name, rating, games, wins, losses, is_provisional, peak_rating, lowest_rating, win_rate, current_streak, last_updated, created_at)
-      VALUES (?, COALESCE(?, (SELECT hero_name FROM heroRatings WHERE hero_id = ?)), ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), COALESCE((SELECT created_at FROM heroRatings WHERE hero_id = ?), datetime('now')))
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `,
     args: [
       winnerId,
-      winnerName || null,
-      winnerId,
+      finalWinnerName,
       eloResult.newWinnerRating,
       winnerNewGames,
       winnerNewWins,
@@ -118,8 +122,7 @@ async function updateHeroRatings(
       winnerNewPeak,
       winnerNewLowest,
       winnerWinRate,
-      winnerNewStreak,
-      winnerId
+      winnerNewStreak
     ]
   });
 
@@ -128,12 +131,11 @@ async function updateHeroRatings(
     sql: `
       INSERT OR REPLACE INTO heroRatings
       (hero_id, hero_name, rating, games, wins, losses, is_provisional, peak_rating, lowest_rating, win_rate, current_streak, last_updated, created_at)
-      VALUES (?, COALESCE(?, (SELECT hero_name FROM heroRatings WHERE hero_id = ?)), ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), COALESCE((SELECT created_at FROM heroRatings WHERE hero_id = ?), datetime('now')))
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `,
     args: [
       loserId,
-      loserName || null,
-      loserId,
+      finalLoserName,
       eloResult.newLoserRating,
       loserNewGames,
       loserRating.wins,
@@ -142,8 +144,7 @@ async function updateHeroRatings(
       loserNewPeak,
       loserNewLowest,
       loserWinRate,
-      loserNewStreak,
-      loserId
+      loserNewStreak
     ]
   });
 
