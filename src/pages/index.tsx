@@ -1,22 +1,73 @@
 import { trpc } from "../utils/trpc";
 import { getForVote } from "../utils/getRandomHero";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { inferQueryResponse } from "./api/trpc/[trpc]";
 import Image from "next/image";
 import Link from "next/link";
 import Head from "next/head";
 import { RatingChangeToast, RatingChangeData } from "../components/RatingChangeToast";
+import {
+  AchievementBadges,
+  AchievementUnlockToast,
+  getVoteCount,
+  incrementVoteCount,
+  getUnlockedBadges,
+  Badge
+} from "../components/AchievementBadges";
+import {
+  VotingStreak,
+  getStreakData,
+  updateStreak,
+  StreakData
+} from "../components/VotingStreak";
+import {
+  DiscoveryTracker,
+  getDiscoveredHeroes,
+  addDiscoveredHeroes,
+  DiscoveryData
+} from "../components/DiscoveryTracker";
 import { motion } from "framer-motion";
-import confetti from "canvas-confetti";
 
 export default function Home() {
   const [ids, updateId] = useState(() => getForVote());
   const [toastData, setToastData] = useState<RatingChangeData | null>(null);
+  const [voteCount, setVoteCount] = useState(0);
+  const [unlockedBadge, setUnlockedBadge] = useState<Badge | null>(null);
+  const [streakData, setStreakData] = useState<StreakData>({
+    currentStreak: 0,
+    longestStreak: 0,
+    lastVoteDate: null,
+    votedToday: false,
+  });
+  const [discoveredCount, setDiscoveredCount] = useState(0);
+  const [newDiscovery, setNewDiscovery] = useState(false);
+
+  // Load vote count, streak data, and discovery data from localStorage on mount
+  useEffect(() => {
+    setVoteCount(getVoteCount());
+    setStreakData(getStreakData());
+    setDiscoveredCount(getDiscoveredHeroes().size);
+  }, []);
 
   const [id1, id2] = ids;
 
   const firstHeroQuery = trpc.useQuery(["get-hero-by-id", { id: id1 }]);
   const secondHeroQuery = trpc.useQuery(["get-hero-by-id", { id: id2 }]);
+
+  // Track discovered heroes whenever new heroes appear
+  useEffect(() => {
+    if (id1 && id2) {
+      const discoveryData = addDiscoveredHeroes([id1, id2]);
+      setDiscoveredCount(discoveryData.totalDiscovered);
+
+      // Show new discovery animation if new heroes were found
+      if (discoveryData.newlyDiscovered.length > 0) {
+        setNewDiscovery(true);
+        const timer = setTimeout(() => setNewDiscovery(false), 2000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [id1, id2]);
 
   const hero1Name = firstHeroQuery.data?.name || "";
   const hero2Name = secondHeroQuery.data?.name || "";
@@ -37,25 +88,30 @@ export default function Home() {
 
     voteMutate.mutate(voteData, {
       onSuccess: (data) => {
-        if (data.success && data.winnerRatingChange !== undefined) {
-          // Trigger confetti before updating IDs
-          if (data.winnerRatingChange > 20) {
-            // Big upset! More dramatic confetti
-            confetti({
-              particleCount: 150,
-              spread: 100,
-              origin: { y: 0.6 },
-              colors: ['#FFD700', '#FFA500', '#FF6347'] // Gold, orange, red
-            });
-          } else {
-            // Normal confetti
-            confetti({
-              particleCount: 80,
-              spread: 60,
-              origin: { y: 0.6 }
-            });
-          }
+        // Track previous unlocked badges count
+        const previousBadges = getUnlockedBadges(voteCount);
+        const previousBadgeCount = previousBadges.length;
 
+        // Increment vote count and check for new badge
+        const newVoteCount = incrementVoteCount();
+        setVoteCount(newVoteCount);
+
+        // Update streak data
+        const newStreakData = updateStreak();
+        setStreakData(newStreakData);
+
+        const currentBadges = getUnlockedBadges(newVoteCount);
+        const currentBadgeCount = currentBadges.length;
+
+        // Check if a new badge was unlocked
+        if (currentBadgeCount > previousBadgeCount) {
+          const newBadge = currentBadges[currentBadgeCount - 1];
+          if (newBadge) {
+            setUnlockedBadge(newBadge);
+          }
+        }
+
+        if (data.success && data.winnerRatingChange !== undefined) {
           setToastData({
             winnerName,
             loserName,
@@ -66,7 +122,7 @@ export default function Home() {
           });
         }
 
-        // Update IDs after confetti and toast
+        // Update IDs after toast
         updateId(getForVote());
       },
     });
@@ -141,6 +197,10 @@ export default function Home() {
         </Head>
 
         <RatingChangeToast data={toastData} onClose={() => setToastData(null)} />
+        <AchievementUnlockToast
+          badge={unlockedBadge}
+          onClose={() => setUnlockedBadge(null)}
+        />
 
         {/* Header */}
         <div className="text-center mb-8">
@@ -149,6 +209,18 @@ export default function Home() {
             Which hero do you like more? Click to vote!
           </p>
         </div>
+
+        {/* Achievement Badges Section */}
+        <AchievementBadges voteCount={voteCount} />
+
+        {/* Voting Streak Section */}
+        <VotingStreak streakData={streakData} />
+
+        {/* Discovery Tracker Section */}
+        <DiscoveryTracker
+          discoveredCount={discoveredCount}
+          newDiscovery={newDiscovery}
+        />
 
         {/* Voting Area */}
         <div className="flex flex-col items-center">
