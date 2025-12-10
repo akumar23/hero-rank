@@ -104,7 +104,7 @@ async function updateHeroRatings(winnerId: number, loserId: number): Promise<Rat
       eloResult.newWinnerRating,
       winnerNewGames,
       winnerNewWins,
-      loserNewLosses,
+      winnerRating.losses,
       isProvisional(winnerNewGames) ? 1 : 0,
       winnerNewPeak,
       winnerNewLowest,

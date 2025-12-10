@@ -1,5 +1,4 @@
 import type { GetStaticProps } from "next";
-import { trpc } from "../utils/trpc";
 import Head from "next/head";
 import Image from "next/image";
 import { turso } from "../utils/turso";
@@ -32,6 +31,7 @@ interface SerializedHeroRating {
   lastUpdated: string | null;
   createdAt: string | null;
   wilsonScore: number;
+  heroName: string;
 }
 
 /**
@@ -114,7 +114,7 @@ const getHeroRatings = async (): Promise<SerializedHeroRating[]> => {
     });
 
     const ratings: SerializedHeroRating[] = [];
-    
+
     for (const row of result.rows) {
       const data: any = row;
       const wilsonScoreValue = wilsonScore(Number(data.wins), Number(data.games));
@@ -132,8 +132,34 @@ const getHeroRatings = async (): Promise<SerializedHeroRating[]> => {
         lastUpdated: data.last_updated || null,
         createdAt: data.created_at || null,
         wilsonScore: wilsonScoreValue,
+        heroName: "", // Will be populated below
       });
     }
+
+    // Fetch all hero names in parallel
+    const heroNamePromises = ratings.map(async (rating) => {
+      try {
+        const res = await fetch(
+          `https://www.superheroapi.com/api.php/2422583714549928/${rating.heroId}`
+        );
+        const data = await res.json();
+        return { heroId: rating.heroId, name: data.name || `Hero #${rating.heroId}` };
+      } catch (error) {
+        console.error(`Error fetching hero name for ${rating.heroId}:`, error);
+        return { heroId: rating.heroId, name: `Hero #${rating.heroId}` };
+      }
+    });
+
+    const heroNames = await Promise.allSettled(heroNamePromises);
+
+    // Populate hero names
+    heroNames.forEach((result, index) => {
+      if (result.status === 'fulfilled' && ratings[index]) {
+        ratings[index]!.heroName = result.value.name;
+      } else if (ratings[index]) {
+        ratings[index]!.heroName = `Hero #${ratings[index]!.heroId}`;
+      }
+    });
 
     return ratings;
   } catch (error) {
@@ -150,11 +176,9 @@ const HeroListing: React.FC<{
   heroRating: SerializedHeroRating;
   rank: number;
 }> = ({ heroRating, rank }) => {
-  const hero = trpc.useQuery(["get-hero-by-id", { id: heroRating.heroId }]);
-
   // Use the API proxy route to bypass Cloudflare's hotlinking protection
   const heroUrl = `/api/hero-image/${heroRating.heroId}`;
-  const heroName = hero.data?.name || `Hero #${heroRating.heroId}`;
+  const heroName = heroRating.heroName;
 
   // Format win rate to 1 decimal place
   const winRateFormatted = heroRating.winRate.toFixed(1);
@@ -221,31 +245,19 @@ const HeroListing: React.FC<{
 
       {/* Hero Image */}
       <div className="flex justify-center mb-3">
-        {hero.isLoading ? (
-          <div className="w-24 h-32 bg-gray-700 animate-pulse rounded" />
-        ) : heroUrl ? (
-          <Image
-            src={heroUrl}
-            alt={heroName}
-            width={96}
-            height={128}
-            className="object-cover rounded shadow-lg"
-          />
-        ) : (
-          <div className="w-24 h-32 bg-gray-700 rounded flex items-center justify-center text-gray-500">
-            No Image
-          </div>
-        )}
+        <Image
+          src={heroUrl}
+          alt={heroName}
+          width={96}
+          height={128}
+          className="object-cover rounded shadow-lg"
+        />
       </div>
 
       {/* Hero Name */}
       <div className="text-center mb-2">
         <h3 className="font-bold text-lg truncate" title={heroName}>
-          {hero.isLoading ? (
-            <span className="bg-gray-700 animate-pulse inline-block w-20 h-5 rounded" />
-          ) : (
-            heroName
-          )}
+          {heroName}
         </h3>
       </div>
 
@@ -571,21 +583,76 @@ const calculateStats = async (
       ? heroRatings.reduce((sum, hero) => sum + hero.rating, 0) / heroRatings.length
       : 1500;
 
-  // Fetch hero names for top heroes
+  // Fetch hero names for top heroes in parallel when they're different
   let highestRatedHero = null;
   let mostGamesHero = null;
 
-  if (highestRated) {
+  // Determine which heroes need to be fetched
+  const isSameHero = mostGames && mostGames.heroId === highestRated?.heroId;
+
+  if (highestRated && mostGames && !isSameHero) {
+    // Fetch both heroes in parallel
+    const [highestRatedResult, mostGamesResult] = await Promise.allSettled([
+      fetch(`https://www.superheroapi.com/api.php/2422583714549928/${highestRated.heroId}`)
+        .then(res => res.json()),
+      fetch(`https://www.superheroapi.com/api.php/2422583714549928/${mostGames.heroId}`)
+        .then(res => res.json())
+    ]);
+
+    // Process highest rated hero
+    if (highestRatedResult.status === 'fulfilled') {
+      highestRatedHero = {
+        name: highestRatedResult.value.name || `Hero #${highestRated.heroId}`,
+        rating: highestRated.rating,
+        heroId: highestRated.heroId,
+      };
+    } else {
+      console.error("Error fetching highest rated hero name:", highestRatedResult.reason);
+      highestRatedHero = {
+        name: `Hero #${highestRated.heroId}`,
+        rating: highestRated.rating,
+        heroId: highestRated.heroId,
+      };
+    }
+
+    // Process most games hero
+    if (mostGamesResult.status === 'fulfilled') {
+      mostGamesHero = {
+        name: mostGamesResult.value.name || `Hero #${mostGames.heroId}`,
+        games: mostGames.games,
+        heroId: mostGames.heroId,
+      };
+    } else {
+      console.error("Error fetching most games hero name:", mostGamesResult.reason);
+      mostGamesHero = {
+        name: `Hero #${mostGames.heroId}`,
+        games: mostGames.games,
+        heroId: mostGames.heroId,
+      };
+    }
+  } else if (highestRated) {
+    // Fetch only one hero (either they're the same or mostGames doesn't exist)
     try {
       const res = await fetch(
         `https://www.superheroapi.com/api.php/2422583714549928/${highestRated.heroId}`
       );
       const data = await res.json();
+      const heroName = data.name || `Hero #${highestRated.heroId}`;
+
       highestRatedHero = {
-        name: data.name || `Hero #${highestRated.heroId}`,
+        name: heroName,
         rating: highestRated.rating,
         heroId: highestRated.heroId,
       };
+
+      // Reuse the same name if they're the same hero
+      if (mostGames && isSameHero) {
+        mostGamesHero = {
+          name: heroName,
+          games: mostGames.games,
+          heroId: mostGames.heroId,
+        };
+      }
     } catch (error) {
       console.error("Error fetching highest rated hero name:", error);
       highestRatedHero = {
@@ -593,34 +660,15 @@ const calculateStats = async (
         rating: highestRated.rating,
         heroId: highestRated.heroId,
       };
-    }
-  }
 
-  if (mostGames && mostGames.heroId !== highestRated?.heroId) {
-    try {
-      const res = await fetch(
-        `https://www.superheroapi.com/api.php/2422583714549928/${mostGames.heroId}`
-      );
-      const data = await res.json();
-      mostGamesHero = {
-        name: data.name || `Hero #${mostGames.heroId}`,
-        games: mostGames.games,
-        heroId: mostGames.heroId,
-      };
-    } catch (error) {
-      console.error("Error fetching most games hero name:", error);
-      mostGamesHero = {
-        name: `Hero #${mostGames.heroId}`,
-        games: mostGames.games,
-        heroId: mostGames.heroId,
-      };
+      if (mostGames && isSameHero) {
+        mostGamesHero = {
+          name: `Hero #${mostGames.heroId}`,
+          games: mostGames.games,
+          heroId: mostGames.heroId,
+        };
+      }
     }
-  } else if (mostGames) {
-    mostGamesHero = {
-      name: highestRatedHero?.name || `Hero #${mostGames.heroId}`,
-      games: mostGames.games,
-      heroId: mostGames.heroId,
-    };
   }
 
   return {

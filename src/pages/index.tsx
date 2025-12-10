@@ -26,9 +26,10 @@ import {
   addDiscoveredHeroes,
   DiscoveryData
 } from "../components/DiscoveryTracker";
-import { motion } from "framer-motion";
+import { useQueryClient } from "react-query";
 
 export default function Home() {
+  const queryClient = useQueryClient();
   const [ids, updateId] = useState(() => getForVote());
   const [toastData, setToastData] = useState<RatingChangeData | null>(null);
   const [voteCount, setVoteCount] = useState(0);
@@ -88,6 +89,9 @@ export default function Home() {
 
     voteMutate.mutate(voteData, {
       onSuccess: (data) => {
+        // Invalidate hero queries to ensure fresh data on results page
+        queryClient.invalidateQueries(["get-hero-by-id"]);
+
         // Track previous unlocked badges count
         const previousBadges = getUnlockedBadges(voteCount);
         const previousBadgeCount = previousBadges.length;
@@ -134,22 +138,9 @@ export default function Home() {
     heroId: number;
     isLoading: boolean;
   }> = ({ heroUrl, heroName, heroId, isLoading }) => (
-    <motion.div
-      className="relative border border-white/10 rounded-2xl p-6 bg-white/5 backdrop-blur-lg hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer overflow-hidden"
+    <div
+      className="hero-card relative border border-white/10 rounded-2xl p-6 bg-white/5 backdrop-blur-lg cursor-pointer overflow-hidden"
       onClick={() => vote(heroId)}
-      whileHover={{
-        scale: 1.05,
-        y: -8,
-        boxShadow: "0 0 30px rgba(59, 130, 246, 0.3)",
-      }}
-      whileTap={{
-        scale: 0.98,
-      }}
-      transition={{
-        type: "spring",
-        stiffness: 300,
-        damping: 20,
-      }}
     >
       {/* Gradient overlay for depth */}
       <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-black/20 pointer-events-none rounded-2xl" />
@@ -192,7 +183,7 @@ export default function Home() {
           </button>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 
   return (
@@ -219,61 +210,33 @@ export default function Home() {
         {/* Voting Area */}
         <div className="flex flex-col items-center">
           <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-12 mb-8">
-            <motion.div
-              key={id1}
-              initial={{ opacity: 0, x: -50 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{
-                type: "spring",
-                stiffness: 260,
-                damping: 20,
-                delay: 0.1,
-              }}
-            >
+            <div key={id1} className="hero-entrance hero-entrance-left">
               <HeroCard
                 heroUrl={hero1Url}
                 heroName={hero1Name}
                 heroId={id1}
                 isLoading={firstHeroQuery.isLoading}
               />
-            </motion.div>
+            </div>
 
-            <motion.div
+            <div
               key={`vs-${id1}-${id2}`}
-              initial={{ opacity: 0, scale: 0.5 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{
-                type: "spring",
-                stiffness: 260,
-                damping: 20,
-                delay: 0.2,
-              }}
-              className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-yellow-500 to-red-500"
+              className="vs-text text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-yellow-500 to-red-500"
               style={{
                 filter: "drop-shadow(0 0 8px rgba(239, 68, 68, 0.5))"
               }}
             >
               VS
-            </motion.div>
+            </div>
 
-            <motion.div
-              key={id2}
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{
-                type: "spring",
-                stiffness: 260,
-                damping: 20,
-                delay: 0.3,
-              }}
-            >
+            <div key={id2} className="hero-entrance hero-entrance-right">
               <HeroCard
                 heroUrl={hero2Url}
                 heroName={hero2Name}
                 heroId={id2}
                 isLoading={secondHeroQuery.isLoading}
               />
-            </motion.div>
+            </div>
           </div>
 
           {/* Action Buttons */}

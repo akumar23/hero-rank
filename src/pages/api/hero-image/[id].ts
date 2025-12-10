@@ -28,39 +28,48 @@ export default async function handler(
   }
 
   try {
-    // Use the alternative superhero-api that hosts images on jsDelivr CDN
-    // This API has the same hero IDs but with accessible image URLs
-    const heroResponse = await fetch(
-      `https://akabab.github.io/superhero-api/api/id/${heroId}.json`
-    );
+    // Directly construct the jsDelivr CDN URL using the predictable pattern
+    // This eliminates the need to fetch JSON first (cuts requests in half)
+    const directImageUrl = `https://cdn.jsdelivr.net/gh/akabab/superhero-api@0.3.0/api/images/md/${heroId}.jpg`;
 
-    if (!heroResponse.ok) {
-      // If hero not found in alternative API, return 404
-      if (heroResponse.status === 404) {
-        return res.status(404).json({ error: "Hero not found" });
-      }
-      return res.status(heroResponse.status).json({ error: "Failed to fetch hero data" });
-    }
+    // Attempt to fetch the image directly
+    let imageResponse = await fetch(directImageUrl);
 
-    const heroData = await heroResponse.json();
-
-    // Use medium size image for good quality/size balance
-    // Available sizes: xs, sm, md, lg
-    const imageUrl = heroData?.images?.md || heroData?.images?.lg || heroData?.images?.sm;
-
-    if (!imageUrl) {
-      return res.status(404).json({ error: "Hero image not found" });
-    }
-
-    // Fetch the actual image from jsDelivr CDN
-    const imageResponse = await fetch(imageUrl);
-
+    // Fallback: if direct URL fails, fetch JSON to get the correct URL
+    // This handles edge cases where the image format or path differs
     if (!imageResponse.ok) {
-      return res.status(imageResponse.status).json({
-        error: "Failed to fetch image",
-        status: imageResponse.status,
-        statusText: imageResponse.statusText
-      });
+      const heroResponse = await fetch(
+        `https://akabab.github.io/superhero-api/api/id/${heroId}.json`
+      );
+
+      if (!heroResponse.ok) {
+        // If hero not found in alternative API, return 404
+        if (heroResponse.status === 404) {
+          return res.status(404).json({ error: "Hero not found" });
+        }
+        return res.status(heroResponse.status).json({ error: "Failed to fetch hero data" });
+      }
+
+      const heroData = await heroResponse.json();
+
+      // Use medium size image for good quality/size balance
+      // Available sizes: xs, sm, md, lg
+      const imageUrl = heroData?.images?.md || heroData?.images?.lg || heroData?.images?.sm;
+
+      if (!imageUrl) {
+        return res.status(404).json({ error: "Hero image not found" });
+      }
+
+      // Fetch the actual image from jsDelivr CDN
+      imageResponse = await fetch(imageUrl);
+
+      if (!imageResponse.ok) {
+        return res.status(imageResponse.status).json({
+          error: "Failed to fetch image",
+          status: imageResponse.status,
+          statusText: imageResponse.statusText
+        });
+      }
     }
 
     // Get the image content type

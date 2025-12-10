@@ -7,3 +7,66 @@ body {
     background-image: var(--wiggles-bg);
     overscroll-behavior-y: none;
 }
+
+/* Hero card animations */
+.hero-card {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hero-card:hover {
+    transform: scale(1.05) translateY(-8px);
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
+}
+
+.hero-card:active {
+    transform: scale(0.98);
+    transition-duration: 0.1s;
+}
+
+/* Hero entrance animations */
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.hero-entrance-left {
+    animation: slideInLeft 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.1s both;
+}
+
+.hero-entrance-right {
+    animation: slideInRight 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.3s both;
+}
+
+.vs-text {
+    animation: scaleIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.2s both;
+}
