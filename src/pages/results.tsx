@@ -35,6 +35,74 @@ interface SerializedHeroRating {
 }
 
 /**
+ * Tier information based on Elo rating.
+ */
+interface TierInfo {
+  name: string;
+  color: string;
+  icon: string;
+  minRating: number;
+}
+
+/**
+ * Get tier information based on Elo rating.
+ * Tiers: Bronze (<1400), Silver (1400-1549), Gold (1550-1699), Platinum (1700-1849), Diamond (1850+)
+ */
+const getTierInfo = (rating: number): TierInfo => {
+  if (rating >= 1850) {
+    return {
+      name: 'Diamond',
+      color: 'text-purple-400 bg-purple-400/20',
+      icon: '👑',
+      minRating: 1850
+    };
+  }
+  if (rating >= 1700) {
+    return {
+      name: 'Platinum',
+      color: 'text-cyan-400 bg-cyan-400/20',
+      icon: '💎',
+      minRating: 1700
+    };
+  }
+  if (rating >= 1550) {
+    return {
+      name: 'Gold',
+      color: 'text-yellow-400 bg-yellow-400/20',
+      icon: '🥇',
+      minRating: 1550
+    };
+  }
+  if (rating >= 1400) {
+    return {
+      name: 'Silver',
+      color: 'text-gray-300 bg-gray-300/20',
+      icon: '🥈',
+      minRating: 1400
+    };
+  }
+  return {
+    name: 'Bronze',
+    color: 'text-amber-600 bg-amber-600/20',
+    icon: '🥉',
+    minRating: 0
+  };
+};
+
+/**
+ * TierBadge component displays a hero's tier badge based on their Elo rating.
+ */
+const TierBadge: React.FC<{ rating: number }> = ({ rating }) => {
+  const tier = getTierInfo(rating);
+  return (
+    <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${tier.color}`}>
+      <span>{tier.icon}</span>
+      <span>{tier.name}</span>
+    </div>
+  );
+};
+
+/**
  * Fetches all hero ratings from Turso, ordered by rating descending.
  * Returns empty array if there's an error.
  */
@@ -128,8 +196,22 @@ const HeroListing: React.FC<{
     }
   };
 
+  // Get rank-specific border styling for top 3 heroes
+  const getRankBorderClass = () => {
+    switch (rank) {
+      case 1:
+        return "ring-2 ring-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.4)] animate-gold-pulse";
+      case 2:
+        return "ring-2 ring-gray-300 shadow-[0_0_15px_rgba(209,213,219,0.3)]";
+      case 3:
+        return "ring-2 ring-amber-600 shadow-[0_0_15px_rgba(217,119,6,0.3)]";
+      default:
+        return "";
+    }
+  };
+
   return (
-    <div className="relative border border-gray-700 rounded-lg p-4 bg-gray-800/50 hover:bg-gray-800/80 transition-colors">
+    <div className={`relative border border-gray-700 rounded-lg p-4 bg-gray-800/50 hover:bg-gray-800/80 transition-colors ${getRankBorderClass()}`}>
       {/* Rank Badge */}
       <div
         className={`absolute -top-2 -left-2 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${getRankBadgeClass()}`}
@@ -165,6 +247,11 @@ const HeroListing: React.FC<{
             heroName
           )}
         </h3>
+      </div>
+
+      {/* Tier Badge */}
+      <div className="flex justify-center mb-3">
+        <TierBadge rating={heroRating.rating} />
       </div>
 
       {/* Elo Rating - Prominent Display */}
@@ -396,6 +483,33 @@ const Results: React.FC<{
               For example, a hero with 5-0 record (100% win rate) will have a lower Wilson Score than a hero with 95-5 record (95% win rate), because we have much more confidence in the latter.
               This prevents heroes with lucky early wins from dominating the rankings. It is the same algorithm used by Reddit for comment ranking.
             </p>
+          </div>
+
+          {/* Tier System Legend */}
+          <div className="bg-gray-800/50 rounded-lg p-4 max-w-4xl mx-auto">
+            <h3 className="text-sm font-semibold text-blue-300 mb-3">Ranking Tiers</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+              <div className="flex flex-col items-center gap-1">
+                <TierBadge rating={1900} />
+                <span className="text-xs text-gray-400">1850+</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <TierBadge rating={1750} />
+                <span className="text-xs text-gray-400">1700-1849</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <TierBadge rating={1600} />
+                <span className="text-xs text-gray-400">1550-1699</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <TierBadge rating={1450} />
+                <span className="text-xs text-gray-400">1400-1549</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <TierBadge rating={1300} />
+                <span className="text-xs text-gray-400">&lt;1400</span>
+              </div>
+            </div>
           </div>
         </div>
 

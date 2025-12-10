@@ -6,6 +6,8 @@ import Image from "next/image";
 import Link from "next/link";
 import Head from "next/head";
 import { RatingChangeToast, RatingChangeData } from "../components/RatingChangeToast";
+import { motion } from "framer-motion";
+import confetti from "canvas-confetti";
 
 export default function Home() {
   const [ids, updateId] = useState(() => getForVote());
@@ -36,6 +38,24 @@ export default function Home() {
     voteMutate.mutate(voteData, {
       onSuccess: (data) => {
         if (data.success && data.winnerRatingChange !== undefined) {
+          // Trigger confetti before updating IDs
+          if (data.winnerRatingChange > 20) {
+            // Big upset! More dramatic confetti
+            confetti({
+              particleCount: 150,
+              spread: 100,
+              origin: { y: 0.6 },
+              colors: ['#FFD700', '#FFA500', '#FF6347'] // Gold, orange, red
+            });
+          } else {
+            // Normal confetti
+            confetti({
+              particleCount: 80,
+              spread: 60,
+              origin: { y: 0.6 }
+            });
+          }
+
           setToastData({
             winnerName,
             loserName,
@@ -45,10 +65,11 @@ export default function Home() {
             loserNewRating: data.loserNewRating,
           });
         }
+
+        // Update IDs after confetti and toast
+        updateId(getForVote());
       },
     });
-
-    updateId(getForVote());
   };
 
   const HeroCard: React.FC<{
@@ -57,41 +78,59 @@ export default function Home() {
     heroId: number;
     isLoading: boolean;
   }> = ({ heroUrl, heroName, heroId, isLoading }) => (
-    <div
-      className="relative border border-gray-700 rounded-lg p-6 bg-gray-800/50 hover:bg-gray-800/80 transition-colors cursor-pointer"
+    <motion.div
+      className="relative border border-white/10 rounded-2xl p-6 bg-white/5 backdrop-blur-lg hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer overflow-hidden"
       onClick={() => vote(heroId)}
+      whileHover={{
+        scale: 1.05,
+        y: -8,
+        boxShadow: "0 0 30px rgba(59, 130, 246, 0.3)",
+      }}
+      whileTap={{
+        scale: 0.98,
+      }}
+      transition={{
+        type: "spring",
+        stiffness: 300,
+        damping: 20,
+      }}
     >
-      <div className="flex justify-center mb-4">
-        {isLoading ? (
-          <div className="w-32 h-44 bg-gray-700 animate-pulse rounded" />
-        ) : heroUrl ? (
-          <Image
-            src={heroUrl}
-            alt={heroName}
-            width={128}
-            height={176}
-            className="object-cover rounded shadow-lg"
-          />
-        ) : (
-          <div className="w-32 h-44 bg-gray-700 rounded flex items-center justify-center text-gray-500">
-            No Image
-          </div>
-        )}
-      </div>
+      {/* Gradient overlay for depth */}
+      <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-black/20 pointer-events-none rounded-2xl" />
 
-      <div className="text-center">
-        <h3 className="font-bold text-xl truncate mb-3" title={heroName}>
+      <div className="relative z-10">
+        <div className="flex justify-center mb-4">
           {isLoading ? (
-            <span className="bg-gray-700 animate-pulse inline-block w-24 h-6 rounded" />
+            <div className="w-32 h-44 bg-gray-700 animate-pulse rounded" />
+          ) : heroUrl ? (
+            <Image
+              src={heroUrl}
+              alt={heroName}
+              width={128}
+              height={176}
+              className="object-cover rounded shadow-lg"
+            />
           ) : (
-            heroName
+            <div className="w-32 h-44 bg-gray-700 rounded flex items-center justify-center text-gray-500">
+              No Image
+            </div>
           )}
-        </h3>
-        <button className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors">
-          Vote
-        </button>
+        </div>
+
+        <div className="text-center">
+          <h3 className="font-bold text-xl truncate mb-3" title={heroName}>
+            {isLoading ? (
+              <span className="bg-gray-700 animate-pulse inline-block w-24 h-6 rounded" />
+            ) : (
+              heroName
+            )}
+          </h3>
+          <button className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors">
+            Vote
+          </button>
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 
   return (
@@ -114,21 +153,61 @@ export default function Home() {
         {/* Voting Area */}
         <div className="flex flex-col items-center">
           <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-12 mb-8">
-            <HeroCard
-              heroUrl={hero1Url}
-              heroName={hero1Name}
-              heroId={id1}
-              isLoading={firstHeroQuery.isLoading}
-            />
+            <motion.div
+              key={id1}
+              initial={{ opacity: 0, x: -50 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{
+                type: "spring",
+                stiffness: 260,
+                damping: 20,
+                delay: 0.1,
+              }}
+            >
+              <HeroCard
+                heroUrl={hero1Url}
+                heroName={hero1Name}
+                heroId={id1}
+                isLoading={firstHeroQuery.isLoading}
+              />
+            </motion.div>
 
-            <div className="text-2xl font-bold text-gray-500">VS</div>
+            <motion.div
+              key={`vs-${id1}-${id2}`}
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{
+                type: "spring",
+                stiffness: 260,
+                damping: 20,
+                delay: 0.2,
+              }}
+              className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-yellow-500 to-red-500"
+              style={{
+                filter: "drop-shadow(0 0 8px rgba(239, 68, 68, 0.5))"
+              }}
+            >
+              VS
+            </motion.div>
 
-            <HeroCard
-              heroUrl={hero2Url}
-              heroName={hero2Name}
-              heroId={id2}
-              isLoading={secondHeroQuery.isLoading}
-            />
+            <motion.div
+              key={id2}
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{
+                type: "spring",
+                stiffness: 260,
+                damping: 20,
+                delay: 0.3,
+              }}
+            >
+              <HeroCard
+                heroUrl={hero2Url}
+                heroName={hero2Name}
+                heroId={id2}
+                isLoading={secondHeroQuery.isLoading}
+              />
+            </motion.div>
           </div>
 
           {/* Action Buttons */}
