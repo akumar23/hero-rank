@@ -3,8 +3,11 @@ import Head from "next/head";
 import Image from "next/image";
 import { turso } from "../utils/turso";
 import { HeroRating } from "../types/heroRating";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { StatsDashboard, DashboardStats } from "../components/StatsDashboard";
+import { HolographicHeroCard } from "../components/HolographicHeroCard";
+import { HolographicSkeleton } from "../components/HolographicSkeleton";
 import {
   getConfidenceLevel,
   getConfidenceColorClass,
@@ -325,8 +328,42 @@ const HeroListing: React.FC<{
 type SortOption = 'rating' | 'winRate' | 'games' | 'wilsonScore';
 
 /**
+ * Hook to determine the number of columns based on viewport width
+ * Matches Tailwind's responsive breakpoints:
+ * - default (mobile): 2 columns
+ * - sm (640px): 2 columns
+ * - md (768px): 3 columns
+ * - lg (1024px): 4 columns
+ * - xl (1280px): 5 columns
+ */
+const useColumnCount = () => {
+  const [columnCount, setColumnCount] = useState(2);
+
+  useEffect(() => {
+    const updateColumnCount = () => {
+      const width = window.innerWidth;
+      if (width >= 1280) {
+        setColumnCount(5); // xl
+      } else if (width >= 1024) {
+        setColumnCount(4); // lg
+      } else if (width >= 768) {
+        setColumnCount(3); // md
+      } else {
+        setColumnCount(2); // sm and below
+      }
+    };
+
+    updateColumnCount();
+    window.addEventListener('resize', updateColumnCount);
+    return () => window.removeEventListener('resize', updateColumnCount);
+  }, []);
+
+  return columnCount;
+};
+
+/**
  * Results page component.
- * Displays all heroes ranked by Elo rating in a responsive grid.
+ * Displays all heroes ranked by Elo rating in a responsive virtual-scrolled grid.
  */
 const Results: React.FC<{
   heroRatings: SerializedHeroRating[];
@@ -334,11 +371,29 @@ const Results: React.FC<{
 }> = ({ heroRatings, stats }) => {
   const [showProvisional, setShowProvisional] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>('rating');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTier, setSelectedTier] = useState<string>('all');
+  const parentRef = useRef<HTMLDivElement>(null);
+  const columnCount = useColumnCount();
 
-  // Filter heroes based on provisional status
-  const filteredHeroes = showProvisional
-    ? heroRatings
-    : heroRatings.filter(hero => !hero.isProvisional);
+  // Filter heroes based on search, provisional status, and tier
+  const filteredHeroes = heroRatings.filter((hero) => {
+    // Provisional filter
+    if (!showProvisional && hero.isProvisional) return false;
+
+    // Search filter
+    if (searchQuery && !hero.heroName.toLowerCase().includes(searchQuery.toLowerCase())) {
+      return false;
+    }
+
+    // Tier filter
+    if (selectedTier !== 'all') {
+      const tier = getTierInfo(hero.rating);
+      if (tier.name !== selectedTier) return false;
+    }
+
+    return true;
+  });
 
   // Sort heroes based on selected option
   const sortedHeroes = [...filteredHeroes].sort((a, b) => {
@@ -354,6 +409,17 @@ const Results: React.FC<{
       default:
         return 0;
     }
+  });
+
+  // Calculate rows based on column count
+  const rowCount = Math.ceil(sortedHeroes.length / columnCount);
+
+  // Virtual scrolling setup
+  const rowVirtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 520, // Approximate height of a hero card (adjust based on actual card height)
+    overscan: 2, // Render 2 extra rows above and below viewport
   });
 
   return (
@@ -374,67 +440,153 @@ const Results: React.FC<{
         {/* Statistics Dashboard */}
         <StatsDashboard stats={stats} />
 
-        {/* Controls */}
-        <div className="mb-6 flex flex-col sm:flex-row gap-4 items-center justify-between bg-gray-800 p-4 rounded-lg">
-          {/* Sort Options */}
-          <div className="flex items-center gap-3">
-            <label className="text-gray-400 text-sm font-medium">Sort by:</label>
-            <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={() => setSortBy('rating')}
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                  sortBy === 'rating'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                Rating
-              </button>
-              <button
-                onClick={() => setSortBy('wilsonScore')}
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                  sortBy === 'wilsonScore'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-                title="Sort by confidence-adjusted win rate (accounts for sample size)"
-              >
-                Wilson Score
-              </button>
-              <button
-                onClick={() => setSortBy('winRate')}
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                  sortBy === 'winRate'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                Win Rate
-              </button>
-              <button
-                onClick={() => setSortBy('games')}
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                  sortBy === 'games'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                Games Played
-              </button>
-            </div>
+        {/* Search and Filters */}
+        <div className="mb-6 space-y-4">
+          {/* Search Bar */}
+          <div className="bg-gray-800 p-4 rounded-lg">
+            <label htmlFor="search" className="text-gray-400 text-sm font-medium mb-2 block">
+              Search Heroes
+            </label>
+            <input
+              id="search"
+              type="text"
+              placeholder="Search by name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
           </div>
 
-          {/* Provisional Filter */}
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showProvisional}
-                onChange={(e) => setShowProvisional(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-900"
-              />
-              <span className="text-sm text-gray-300">Show provisional heroes</span>
-            </label>
+          {/* Controls */}
+          <div className="bg-gray-800 p-4 rounded-lg space-y-4">
+            {/* Sort Options */}
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+              <label className="text-gray-400 text-sm font-medium whitespace-nowrap">Sort by:</label>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => setSortBy('rating')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    sortBy === 'rating'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  Rating
+                </button>
+                <button
+                  onClick={() => setSortBy('wilsonScore')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    sortBy === 'wilsonScore'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                  title="Sort by confidence-adjusted win rate (accounts for sample size)"
+                >
+                  Wilson Score
+                </button>
+                <button
+                  onClick={() => setSortBy('winRate')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    sortBy === 'winRate'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  Win Rate
+                </button>
+                <button
+                  onClick={() => setSortBy('games')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    sortBy === 'games'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  Games Played
+                </button>
+              </div>
+            </div>
+
+            {/* Tier Filter */}
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+              <label className="text-gray-400 text-sm font-medium whitespace-nowrap">Filter by Tier:</label>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => setSelectedTier('all')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    selectedTier === 'all'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  All Tiers
+                </button>
+                <button
+                  onClick={() => setSelectedTier('Diamond')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    selectedTier === 'Diamond'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  👑 Diamond
+                </button>
+                <button
+                  onClick={() => setSelectedTier('Platinum')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    selectedTier === 'Platinum'
+                      ? 'bg-cyan-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  💎 Platinum
+                </button>
+                <button
+                  onClick={() => setSelectedTier('Gold')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    selectedTier === 'Gold'
+                      ? 'bg-yellow-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  🥇 Gold
+                </button>
+                <button
+                  onClick={() => setSelectedTier('Silver')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    selectedTier === 'Silver'
+                      ? 'bg-gray-400 text-black'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  🥈 Silver
+                </button>
+                <button
+                  onClick={() => setSelectedTier('Bronze')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    selectedTier === 'Bronze'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  🥉 Bronze
+                </button>
+              </div>
+            </div>
+
+            {/* Provisional Filter */}
+            <div className="flex items-center gap-3 pt-2 border-t border-gray-700">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showProvisional}
+                  onChange={(e) => setShowProvisional(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-900"
+                />
+                <span className="text-sm text-gray-300">Show provisional heroes</span>
+              </label>
+              <span className="text-xs text-gray-500 ml-2">({sortedHeroes.length} heroes shown)</span>
+            </div>
           </div>
         </div>
 
@@ -500,7 +652,7 @@ const Results: React.FC<{
           </div>
         </div>
 
-        {/* Results Grid */}
+        {/* Results Grid - Virtualized */}
         {sortedHeroes.length === 0 ? (
           <div className="text-center text-gray-500 py-12">
             <p className="text-xl">
@@ -515,14 +667,70 @@ const Results: React.FC<{
             </p>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {sortedHeroes.map((heroRating, index) => (
-              <HeroListing
-                heroRating={heroRating}
-                rank={index + 1}
-                key={heroRating.heroId}
-              />
-            ))}
+          <div
+            ref={parentRef}
+            className="overflow-auto rounded-lg border border-gray-700 bg-gray-800/30 virtual-scroll-container"
+            style={{
+              height: 'calc(100vh - 300px)',
+              minHeight: '600px',
+            }}
+          >
+            <div
+              style={{
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                width: '100%',
+                position: 'relative',
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const startIndex = virtualRow.index * columnCount;
+                const rowHeroes = sortedHeroes.slice(startIndex, startIndex + columnCount);
+
+                return (
+                  <div
+                    key={virtualRow.key}
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                    <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 p-4">
+                      {rowHeroes.map((heroRating, colIndex) => {
+                        const rank = startIndex + colIndex + 1;
+                        return (
+                          <HolographicHeroCard
+                            key={heroRating.heroId}
+                            heroId={heroRating.heroId}
+                            heroName={heroRating.heroName}
+                            rating={heroRating.rating}
+                            rank={rank}
+                            wins={heroRating.wins}
+                            losses={heroRating.losses}
+                            winRate={heroRating.winRate}
+                            games={heroRating.games}
+                            currentStreak={heroRating.currentStreak}
+                            isProvisional={heroRating.isProvisional}
+                            wilsonScore={heroRating.wilsonScore}
+                          />
+                        );
+                      })}
+                      {/* Fill empty columns with skeleton loaders for better visual consistency */}
+                      {rowHeroes.length < columnCount &&
+                        Array.from({ length: columnCount - rowHeroes.length }).map((_, i) => (
+                          <div key={`skeleton-${i}`} className="invisible">
+                            <HolographicSkeleton />
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

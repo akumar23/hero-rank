@@ -2,7 +2,6 @@ import { trpc } from "../utils/trpc";
 import { getForVote } from "../utils/getRandomHero";
 import { useState, useEffect } from "react";
 import { inferQueryResponse } from "./api/trpc/[trpc]";
-import Image from "next/image";
 import Link from "next/link";
 import Head from "next/head";
 import { RatingChangeToast, RatingChangeData } from "../components/RatingChangeToast";
@@ -27,6 +26,7 @@ import {
   DiscoveryData
 } from "../components/DiscoveryTracker";
 import { useQueryClient } from "react-query";
+import { HeroCard } from "../components/HeroCard";
 
 export default function Home() {
   const queryClient = useQueryClient();
@@ -132,60 +132,6 @@ export default function Home() {
     });
   };
 
-  const HeroCard: React.FC<{
-    heroUrl: string;
-    heroName: string;
-    heroId: number;
-    isLoading: boolean;
-  }> = ({ heroUrl, heroName, heroId, isLoading }) => (
-    <div
-      className="hero-card relative border border-white/10 rounded-2xl p-6 bg-white/5 backdrop-blur-lg cursor-pointer overflow-hidden"
-      onClick={() => vote(heroId)}
-    >
-      {/* Gradient overlay for depth */}
-      <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-black/20 pointer-events-none rounded-2xl" />
-
-      <div className="relative z-10">
-        <div className="flex justify-center mb-4">
-          {/* Fixed container to prevent layout shift */}
-          <div className="w-32 h-44 relative">
-            {isLoading ? (
-              <div className="w-full h-full bg-gray-700 animate-pulse rounded" />
-            ) : heroUrl ? (
-              <Image
-                src={heroUrl}
-                alt={heroName}
-                width={128}
-                height={176}
-                className="object-cover rounded shadow-lg"
-                priority
-                sizes="128px"
-                style={{ width: '100%', height: '100%' }}
-              />
-            ) : (
-              <div className="w-full h-full bg-gray-700 rounded flex items-center justify-center text-gray-500 text-xs">
-                No Image
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="text-center">
-          <h3 className="font-bold text-xl truncate mb-3" title={heroName}>
-            {isLoading ? (
-              <span className="bg-gray-700 animate-pulse inline-block w-24 h-6 rounded" />
-            ) : (
-              heroName
-            )}
-          </h3>
-          <button className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors">
-            Vote
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       <div className="container mx-auto px-4 py-8">
@@ -216,6 +162,7 @@ export default function Home() {
                 heroName={hero1Name}
                 heroId={id1}
                 isLoading={firstHeroQuery.isLoading}
+                onClick={() => vote(id1)}
               />
             </div>
 
@@ -235,6 +182,7 @@ export default function Home() {
                 heroName={hero2Name}
                 heroId={id2}
                 isLoading={secondHeroQuery.isLoading}
+                onClick={() => vote(id2)}
               />
             </div>
           </div>

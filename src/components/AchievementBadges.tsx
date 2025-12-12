@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
+import { celebrateAchievement } from "../utils/confetti";
 
 // Badge type definition
 export interface Badge {
@@ -83,6 +84,9 @@ export const AchievementUnlockToast: React.FC<AchievementUnlockToastProps> = ({
 }) => {
   useEffect(() => {
     if (badge) {
+      // Trigger confetti celebration when badge appears
+      celebrateAchievement(badge.requiredVotes);
+
       const timer = setTimeout(() => {
         onClose();
       }, 3000);
