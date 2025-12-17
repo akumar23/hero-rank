@@ -115,7 +115,7 @@ const RankingRow: React.FC<{
   const ratingPercent = Math.min(100, Math.max(0, ((hero.rating - 1200) / 800) * 100));
 
   return (
-    <div className={`border-b-2 border-ink hover:bg-concrete/50 transition-colors ${getRowBorder()}`}>
+    <div className={`hover:bg-concrete/50 transition-colors ${getRowBorder()}`}>
       <div className="flex items-center gap-2 sm:gap-3 py-2 px-2 sm:px-3">
         {/* Rank */}
         <div className={`w-10 sm:w-12 h-8 flex items-center justify-center border-2 border-ink font-mono text-sm ${getRankStyle()}`}>
