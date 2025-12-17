@@ -17,51 +17,54 @@ export const HeroCard: React.FC<HeroCardProps> = ({
   onClick,
 }) => {
   return (
-    <div
-      className="hero-card relative border border-white/10 rounded-2xl p-6 bg-white/5 backdrop-blur-lg cursor-pointer overflow-hidden"
+    <button
+      className="hero-card w-56 text-left cursor-pointer group"
       onClick={onClick}
+      type="button"
     >
-      {/* Gradient overlay for depth */}
-      <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-black/20 pointer-events-none rounded-2xl" />
-
-      <div className="relative z-10">
-        <div className="flex justify-center mb-4">
-          {/* Fixed container to prevent layout shift */}
-          <div className="w-32 h-44 relative">
-            {isLoading ? (
-              <div className="w-full h-full bg-gray-700 animate-pulse rounded" />
-            ) : heroUrl ? (
-              <Image
-                src={heroUrl}
-                alt={heroName}
-                width={128}
-                height={176}
-                className="object-cover rounded shadow-lg"
-                priority
-                sizes="128px"
-                style={{ width: '100%', height: '100%' }}
-              />
-            ) : (
-              <div className="w-full h-full bg-gray-700 rounded flex items-center justify-center text-gray-500 text-xs">
-                No Image
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="text-center">
-          <h3 className="font-bold text-xl truncate mb-3" title={heroName}>
-            {isLoading ? (
-              <span className="bg-gray-700 animate-pulse inline-block w-24 h-6 rounded" />
-            ) : (
-              heroName
-            )}
-          </h3>
-          <button className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors">
-            Vote
-          </button>
+      {/* Hero Image */}
+      <div className="border-2 border-ink border-b-0 bg-concrete">
+        <div className="w-full aspect-[3/4] relative">
+          {isLoading ? (
+            <div className="w-full h-full skeleton" />
+          ) : heroUrl ? (
+            <Image
+              src={heroUrl}
+              alt={heroName}
+              fill
+              className="object-cover"
+              priority
+              sizes="224px"
+            />
+          ) : (
+            <div className="w-full h-full bg-concrete flex items-center justify-center">
+              <span className="font-mono text-smoke text-xs">NO IMAGE</span>
+            </div>
+          )}
         </div>
       </div>
-    </div>
+
+      {/* Info Section */}
+      <div className="border-2 border-ink bg-paper p-2">
+        {/* Hero ID Badge */}
+        <div className="flex items-center justify-between mb-1">
+          <span className="font-mono text-xs text-smoke">#{heroId}</span>
+        </div>
+
+        {/* Hero Name */}
+        <h3 className="text-display text-lg truncate mb-2" title={heroName}>
+          {isLoading ? (
+            <span className="skeleton inline-block w-32 h-5" />
+          ) : (
+            heroName
+          )}
+        </h3>
+
+        {/* Vote Button */}
+        <div className="btn-brutal-signal w-full text-center text-sm group-hover:shadow-brutal-lg group-hover:-translate-x-0.5 group-hover:-translate-y-0.5">
+          VOTE
+        </div>
+      </div>
+    </button>
   );
 };

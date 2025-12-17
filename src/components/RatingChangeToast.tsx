@@ -16,16 +16,11 @@ interface RatingChangeToastProps {
   duration?: number;
 }
 
-/**
- * Toast notification showing rating changes after a vote.
- * Displays winner/loser with their rating changes in a clean, animated format.
- */
 export const RatingChangeToast: React.FC<RatingChangeToastProps> = ({
   data,
   onClose,
   duration = 4000,
 }) => {
-  // Auto-close the toast after duration
   useEffect(() => {
     if (data) {
       const timer = setTimeout(() => {
@@ -40,88 +35,64 @@ export const RatingChangeToast: React.FC<RatingChangeToastProps> = ({
     <AnimatePresence>
       {data && (
         <motion.div
-          initial={{ opacity: 0, y: -50, scale: 0.9 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -20, scale: 0.95 }}
-          transition={{
-            type: "spring",
-            stiffness: 300,
-            damping: 25,
-          }}
-          className="fixed top-6 right-6 z-50 pointer-events-auto"
+          initial={{ opacity: 0, y: -20, x: 20 }}
+          animate={{ opacity: 1, y: 0, x: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.2 }}
+          className="fixed top-3 right-3 z-50 pointer-events-auto"
         >
-          <div className="bg-gray-800 border border-gray-700 rounded-lg shadow-2xl overflow-hidden min-w-[320px] max-w-md">
+          <div className="border-2 border-ink bg-paper shadow-brutal min-w-[280px]">
             {/* Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-white font-bold text-sm">Rating Update</h3>
-                <button
-                  onClick={onClose}
-                  className="text-white/80 hover:text-white transition-colors text-lg leading-none"
-                  aria-label="Close notification"
-                >
-                  ×
-                </button>
-              </div>
+            <div className="bg-ink text-paper px-3 py-1 flex items-center justify-between">
+              <span className="font-display text-xs font-bold uppercase">
+                RATING UPDATE
+              </span>
+              <button
+                onClick={onClose}
+                className="text-paper/80 hover:text-paper text-lg leading-none font-bold"
+                aria-label="Close"
+              >
+                X
+              </button>
             </div>
 
             {/* Content */}
-            <div className="p-4 space-y-3">
+            <div className="p-3 space-y-2">
               {/* Winner */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between font-mono text-sm">
                 <div className="flex items-center gap-2">
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ delay: 0.2, type: "spring" }}
-                    className="w-2 h-2 rounded-full bg-green-400"
-                  />
-                  <span className="text-white font-medium truncate max-w-[140px]">
+                  <span className="w-2 h-2 bg-green-500" />
+                  <span className="font-bold truncate max-w-[120px]">
                     {data.winnerName}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <motion.span
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.3 }}
-                    className="text-green-400 font-bold text-lg"
-                  >
+                  <span className="text-green-400 font-bold">
                     +{data.winnerChange}
-                  </motion.span>
-                  <span className="text-gray-400 text-sm">
-                    → {data.winnerNewRating}
+                  </span>
+                  <span className="text-smoke text-xs">
+                    {data.winnerNewRating}
                   </span>
                 </div>
               </div>
 
               {/* Divider */}
-              <div className="border-t border-gray-700" />
+              <div className="border-t border-ink" />
 
               {/* Loser */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between font-mono text-sm">
                 <div className="flex items-center gap-2">
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ delay: 0.2, type: "spring" }}
-                    className="w-2 h-2 rounded-full bg-red-400"
-                  />
-                  <span className="text-white font-medium truncate max-w-[140px]">
+                  <span className="w-2 h-2 bg-signal" />
+                  <span className="font-bold truncate max-w-[120px]">
                     {data.loserName}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <motion.span
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.3 }}
-                    className="text-red-400 font-bold text-lg"
-                  >
+                  <span className="text-signal font-bold">
                     {data.loserChange}
-                  </motion.span>
-                  <span className="text-gray-400 text-sm">
-                    → {data.loserNewRating}
+                  </span>
+                  <span className="text-smoke text-xs">
+                    {data.loserNewRating}
                   </span>
                 </div>
               </div>
@@ -132,7 +103,7 @@ export const RatingChangeToast: React.FC<RatingChangeToastProps> = ({
               initial={{ scaleX: 1 }}
               animate={{ scaleX: 0 }}
               transition={{ duration: duration / 1000, ease: "linear" }}
-              className="h-1 bg-blue-500 origin-left"
+              className="h-1 bg-navy origin-left"
             />
           </div>
         </motion.div>

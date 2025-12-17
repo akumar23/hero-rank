@@ -1,7 +1,6 @@
 import { trpc } from "../utils/trpc";
 import { getForVote } from "../utils/getRandomHero";
 import { useState, useEffect } from "react";
-import { inferQueryResponse } from "./api/trpc/[trpc]";
 import Link from "next/link";
 import Head from "next/head";
 import { RatingChangeToast, RatingChangeData } from "../components/RatingChangeToast";
@@ -23,14 +22,16 @@ import {
   DiscoveryTracker,
   getDiscoveredHeroes,
   addDiscoveredHeroes,
-  DiscoveryData
 } from "../components/DiscoveryTracker";
 import { useQueryClient } from "react-query";
 import { HeroCard } from "../components/HeroCard";
 
 export default function Home() {
   const queryClient = useQueryClient();
-  const [ids, updateId] = useState(() => getForVote());
+  // Track if component has mounted on client to avoid hydration mismatch
+  const [isMounted, setIsMounted] = useState(false);
+  // Initialize with placeholder to avoid hydration mismatch - random IDs only generated on client
+  const [ids, updateId] = useState<[number, number] | null>(null);
   const [toastData, setToastData] = useState<RatingChangeData | null>(null);
   const [voteCount, setVoteCount] = useState(0);
   const [unlockedBadge, setUnlockedBadge] = useState<Badge | null>(null);
@@ -43,25 +44,26 @@ export default function Home() {
   const [discoveredCount, setDiscoveredCount] = useState(0);
   const [newDiscovery, setNewDiscovery] = useState(false);
 
-  // Load vote count, streak data, and discovery data from localStorage on mount
+  // Mark as mounted and generate random hero IDs only on client side
   useEffect(() => {
+    setIsMounted(true);
+    const newIds = getForVote();
+    updateId(newIds);
     setVoteCount(getVoteCount());
     setStreakData(getStreakData());
     setDiscoveredCount(getDiscoveredHeroes().size);
   }, []);
 
-  const [id1, id2] = ids;
+  const [id1, id2] = ids || [0, 0];
 
-  const firstHeroQuery = trpc.useQuery(["get-hero-by-id", { id: id1 }]);
-  const secondHeroQuery = trpc.useQuery(["get-hero-by-id", { id: id2 }]);
+  const firstHeroQuery = trpc.useQuery(["get-hero-by-id", { id: id1 }], { enabled: isMounted && id1 > 0 });
+  const secondHeroQuery = trpc.useQuery(["get-hero-by-id", { id: id2 }], { enabled: isMounted && id2 > 0 });
 
-  // Track discovered heroes whenever new heroes appear
   useEffect(() => {
     if (id1 && id2) {
       const discoveryData = addDiscoveredHeroes([id1, id2]);
       setDiscoveredCount(discoveryData.totalDiscovered);
 
-      // Show new discovery animation if new heroes were found
       if (discoveryData.newlyDiscovered.length > 0) {
         setNewDiscovery(true);
         const timer = setTimeout(() => setNewDiscovery(false), 2000);
@@ -89,25 +91,20 @@ export default function Home() {
 
     voteMutate.mutate(voteData, {
       onSuccess: (data) => {
-        // Invalidate hero queries to ensure fresh data on results page
         queryClient.invalidateQueries(["get-hero-by-id"]);
 
-        // Track previous unlocked badges count
         const previousBadges = getUnlockedBadges(voteCount);
         const previousBadgeCount = previousBadges.length;
 
-        // Increment vote count and check for new badge
         const newVoteCount = incrementVoteCount();
         setVoteCount(newVoteCount);
 
-        // Update streak data
         const newStreakData = updateStreak();
         setStreakData(newStreakData);
 
         const currentBadges = getUnlockedBadges(newVoteCount);
         const currentBadgeCount = currentBadges.length;
 
-        // Check if a new badge was unlocked
         if (currentBadgeCount > previousBadgeCount) {
           const newBadge = currentBadges[currentBadgeCount - 1];
           if (newBadge) {
@@ -126,37 +123,54 @@ export default function Home() {
           });
         }
 
-        // Update IDs after toast
         updateId(getForVote());
       },
     });
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="container mx-auto px-4 py-8">
-        <Head>
-          <title>Hero Rank - Vote for Your Favorite</title>
-        </Head>
+    <div className="min-h-screen">
+      <Head>
+        <title>HERO RANK — Vote for Your Favorite</title>
+      </Head>
 
-        <RatingChangeToast data={toastData} onClose={() => setToastData(null)} />
-        <AchievementUnlockToast
-          badge={unlockedBadge}
-          onClose={() => setUnlockedBadge(null)}
-        />
+      <RatingChangeToast data={toastData} onClose={() => setToastData(null)} />
+      <AchievementUnlockToast
+        badge={unlockedBadge}
+        onClose={() => setUnlockedBadge(null)}
+      />
 
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2">Hero Rank</h1>
-          <p className="text-gray-400">
-            Which hero do you like more? Click to vote!
-          </p>
+      {/* Header */}
+      <header className="border-b-3 border-ink">
+        <div className="max-w-4xl mx-auto px-3 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-display text-2xl sm:text-3xl">HERO RANK</h1>
+              <p className="font-mono text-xs text-smoke mt-0.5">
+                ELO-BASED SUPERHERO RANKINGS
+              </p>
+            </div>
+            <Link href="/results">
+              <span className="btn-brutal-ink text-xs">
+                VIEW RANKINGS
+              </span>
+            </Link>
+          </div>
         </div>
+      </header>
 
-        {/* Voting Area */}
-        <div className="flex flex-col items-center">
-          <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-12 mb-8">
-            <div key={id1} className="hero-entrance hero-entrance-left">
+      {/* Main Content */}
+      <main className="max-w-4xl mx-auto px-3 py-6">
+        {/* Instruction */}
+        <p className="font-display text-center text-lg mb-6 text-charcoal">
+          Click the hero you prefer to vote
+        </p>
+
+        {/* Battle Arena */}
+        {isMounted && ids ? (
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 mb-6">
+            {/* Hero 1 */}
+            <div key={id1} className="animate-entrance-left">
               <HeroCard
                 heroUrl={hero1Url}
                 heroName={hero1Name}
@@ -166,17 +180,18 @@ export default function Home() {
               />
             </div>
 
+            {/* VS Badge */}
             <div
               key={`vs-${id1}-${id2}`}
-              className="vs-text text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-yellow-500 to-red-500"
-              style={{
-                filter: "drop-shadow(0 0 8px rgba(239, 68, 68, 0.5))"
-              }}
+              className="animate-vs"
             >
-              VS
+              <div className="bg-signal text-paper border-2 border-ink shadow-brutal px-3 py-1 text-display text-3xl -rotate-3">
+                VS
+              </div>
             </div>
 
-            <div key={id2} className="hero-entrance hero-entrance-right">
+            {/* Hero 2 */}
+            <div key={id2} className="animate-entrance-right">
               <HeroCard
                 heroUrl={hero2Url}
                 heroName={hero2Name}
@@ -186,36 +201,56 @@ export default function Home() {
               />
             </div>
           </div>
-
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4">
-            <button
-              onClick={() => updateId(getForVote())}
-              className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded transition-colors"
-            >
-              Skip / New Heroes
-            </button>
-
-            <Link href="/results">
-              <button className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded transition-colors">
-                View Rankings
-              </button>
-            </Link>
+        ) : (
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 mb-6">
+            <div className="w-56 h-[300px] border-2 border-ink bg-concrete flex items-center justify-center">
+              <span className="font-mono text-smoke">Loading...</span>
+            </div>
+            <div className="bg-signal text-paper border-2 border-ink shadow-brutal px-3 py-1 text-display text-3xl -rotate-3">
+              VS
+            </div>
+            <div className="w-56 h-[300px] border-2 border-ink bg-concrete flex items-center justify-center">
+              <span className="font-mono text-smoke">Loading...</span>
+            </div>
           </div>
+        )}
+
+        {/* Skip Button */}
+        <div className="text-center mb-8">
+          <button
+            onClick={() => updateId(getForVote())}
+            className="btn-brutal text-xs"
+          >
+            SKIP / NEW MATCHUP
+          </button>
         </div>
 
-        {/* Discovery Tracker Section */}
-        <DiscoveryTracker
-          discoveredCount={discoveredCount}
-          newDiscovery={newDiscovery}
-        />
+        {/* Stats Section */}
+        <div className="border-t-3 border-ink pt-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Discovery Tracker */}
+            <DiscoveryTracker
+              discoveredCount={discoveredCount}
+              newDiscovery={newDiscovery}
+            />
 
-        {/* Voting Streak Section */}
-        <VotingStreak streakData={streakData} />
+            {/* Voting Streak */}
+            <VotingStreak streakData={streakData} />
 
-        {/* Achievement Badges Section */}
-        <AchievementBadges voteCount={voteCount} />
-      </div>
+            {/* Achievement Badges */}
+            <AchievementBadges voteCount={voteCount} />
+          </div>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t-2 border-ink mt-8">
+        <div className="max-w-4xl mx-auto px-3 py-2">
+          <p className="font-mono text-xs text-smoke text-center">
+            731 HEROES · ELO RATING SYSTEM · K=32
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }

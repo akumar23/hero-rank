@@ -1,25 +1,15 @@
 import type { GetStaticProps } from "next";
 import Head from "next/head";
 import Image from "next/image";
+import Link from "next/link";
 import { turso } from "../utils/turso";
-import { HeroRating } from "../types/heroRating";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { StatsDashboard, DashboardStats } from "../components/StatsDashboard";
-import { HolographicHeroCard } from "../components/HolographicHeroCard";
-import { HolographicSkeleton } from "../components/HolographicSkeleton";
 import {
-  getConfidenceLevel,
-  getConfidenceColorClass,
-  getConfidenceDescription,
   wilsonScore,
   formatWilsonScore
 } from "../utils/wilsonScore";
 
-/**
- * Serializable hero rating data for SSR/ISR.
- * Timestamps are converted to ISO strings for JSON serialization.
- */
 interface SerializedHeroRating {
   heroId: number;
   rating: number;
@@ -27,88 +17,39 @@ interface SerializedHeroRating {
   wins: number;
   losses: number;
   isProvisional: boolean;
-  peakRating: number;
-  lowestRating: number;
   winRate: number;
   currentStreak: number;
-  lastUpdated: string | null;
-  createdAt: string | null;
   wilsonScore: number;
   heroName: string;
 }
 
-/**
- * Tier information based on Elo rating.
- */
-interface TierInfo {
-  name: string;
-  color: string;
-  icon: string;
-  minRating: number;
+interface DashboardStats {
+  totalVotes: number;
+  totalHeroes: number;
+  highestRatedHero: { name: string; rating: number; heroId: number } | null;
+  averageRating: number;
 }
 
-/**
- * Get tier information based on Elo rating.
- * Tiers: Bronze (<1400), Silver (1400-1549), Gold (1550-1699), Platinum (1700-1849), Diamond (1850+)
- */
-const getTierInfo = (rating: number): TierInfo => {
-  if (rating >= 1850) {
-    return {
-      name: 'Diamond',
-      color: 'text-purple-400 bg-purple-400/20',
-      icon: '👑',
-      minRating: 1850
-    };
-  }
-  if (rating >= 1700) {
-    return {
-      name: 'Platinum',
-      color: 'text-cyan-400 bg-cyan-400/20',
-      icon: '💎',
-      minRating: 1700
-    };
-  }
-  if (rating >= 1550) {
-    return {
-      name: 'Gold',
-      color: 'text-yellow-400 bg-yellow-400/20',
-      icon: '🥇',
-      minRating: 1550
-    };
-  }
-  if (rating >= 1400) {
-    return {
-      name: 'Silver',
-      color: 'text-gray-300 bg-gray-300/20',
-      icon: '🥈',
-      minRating: 1400
-    };
-  }
-  return {
-    name: 'Bronze',
-    color: 'text-amber-600 bg-amber-600/20',
-    icon: '🥉',
-    minRating: 0
-  };
+type TierName = "DIAMOND" | "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
+
+const getTier = (rating: number): { name: TierName; min: number } => {
+  if (rating >= 1850) return { name: "DIAMOND", min: 1850 };
+  if (rating >= 1700) return { name: "PLATINUM", min: 1700 };
+  if (rating >= 1550) return { name: "GOLD", min: 1550 };
+  if (rating >= 1400) return { name: "SILVER", min: 1400 };
+  return { name: "BRONZE", min: 0 };
 };
 
-/**
- * TierBadge component displays a hero's tier badge based on their Elo rating.
- */
-const TierBadge: React.FC<{ rating: number }> = ({ rating }) => {
-  const tier = getTierInfo(rating);
-  return (
-    <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${tier.color}`}>
-      <span>{tier.icon}</span>
-      <span>{tier.name}</span>
-    </div>
-  );
+const getTierClass = (tier: TierName): string => {
+  switch (tier) {
+    case "DIAMOND": return "tier-diamond";
+    case "PLATINUM": return "tier-platinum";
+    case "GOLD": return "tier-gold";
+    case "SILVER": return "tier-silver";
+    case "BRONZE": return "tier-bronze";
+  }
 };
 
-/**
- * Fetches all hero ratings from Turso, ordered by rating descending.
- * Returns empty array if there's an error.
- */
 const getHeroRatings = async (): Promise<SerializedHeroRating[]> => {
   try {
     const result = await turso.execute({
@@ -128,12 +69,8 @@ const getHeroRatings = async (): Promise<SerializedHeroRating[]> => {
         wins: Number(data.wins),
         losses: Number(data.losses),
         isProvisional: Boolean(data.is_provisional),
-        peakRating: Number(data.peak_rating),
-        lowestRating: Number(data.lowest_rating),
         winRate: Number(data.win_rate),
         currentStreak: Number(data.current_streak),
-        lastUpdated: data.last_updated || null,
-        createdAt: data.created_at || null,
         wilsonScore: wilsonScoreValue,
         heroName: data.hero_name || `Hero #${data.hero_id}`,
       });
@@ -146,628 +83,392 @@ const getHeroRatings = async (): Promise<SerializedHeroRating[]> => {
   }
 };
 
-/**
- * Individual hero listing card component.
- * Displays hero image, name, Elo rating, and statistics.
- */
-const HeroListing: React.FC<{
-  heroRating: SerializedHeroRating;
+const RankingRow: React.FC<{
+  hero: SerializedHeroRating;
   rank: number;
-}> = ({ heroRating, rank }) => {
-  // Use the API proxy route to bypass Cloudflare's hotlinking protection
-  const heroUrl = `/api/hero-image/${heroRating.heroId}`;
-  const heroName = heroRating.heroName;
+}> = ({ hero, rank }) => {
+  const heroUrl = `/api/hero-image/${hero.heroId}`;
+  const tier = getTier(hero.rating);
+  const tierClass = getTierClass(tier.name);
 
-  // Format win rate to 1 decimal place
-  const winRateFormatted = heroRating.winRate.toFixed(1);
-
-  // Calculate confidence level
-  const confidenceLevel = getConfidenceLevel(heroRating.games, heroRating.wins, heroRating.losses);
-  const confidenceColor = getConfidenceColorClass(confidenceLevel);
-  const confidenceDesc = getConfidenceDescription(confidenceLevel);
-
-  // Determine streak display
-  const getStreakDisplay = () => {
-    if (heroRating.currentStreak > 0) {
-      return (
-        <span className="text-green-400">
-          W{heroRating.currentStreak}
-        </span>
-      );
-    } else if (heroRating.currentStreak < 0) {
-      return (
-        <span className="text-red-400">
-          L{Math.abs(heroRating.currentStreak)}
-        </span>
-      );
-    }
-    return <span className="text-gray-400">-</span>;
+  const getRankStyle = () => {
+    if (rank === 1) return "bg-champion text-ink font-bold";
+    if (rank === 2) return "bg-silver text-paper font-bold";
+    if (rank === 3) return "bg-bronze text-paper font-bold";
+    return "bg-paper text-charcoal";
   };
 
-  // Determine rank badge color based on position
-  const getRankBadgeClass = () => {
-    switch (rank) {
-      case 1:
-        return "bg-yellow-500 text-black"; // Gold
-      case 2:
-        return "bg-gray-300 text-black"; // Silver
-      case 3:
-        return "bg-amber-600 text-white"; // Bronze
-      default:
-        return "bg-gray-700 text-white";
-    }
+  const getRowBorder = () => {
+    if (rank === 1) return "border-l-4 border-l-champion bg-champion/5";
+    if (rank === 2) return "border-l-4 border-l-silver bg-silver/5";
+    if (rank === 3) return "border-l-4 border-l-bronze bg-bronze/5";
+    return "";
   };
 
-  // Get rank-specific border styling for top 3 heroes
-  const getRankBorderClass = () => {
-    switch (rank) {
-      case 1:
-        return "ring-2 ring-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.4)] animate-gold-pulse";
-      case 2:
-        return "ring-2 ring-gray-300 shadow-[0_0_15px_rgba(209,213,219,0.3)]";
-      case 3:
-        return "ring-2 ring-amber-600 shadow-[0_0_15px_rgba(217,119,6,0.3)]";
-      default:
-        return "";
-    }
-  };
+  const streakDisplay = hero.currentStreak > 0
+    ? <span className="text-green-400 font-mono">W{hero.currentStreak}</span>
+    : hero.currentStreak < 0
+    ? <span className="text-signal font-mono">L{Math.abs(hero.currentStreak)}</span>
+    : <span className="text-smoke font-mono">-</span>;
+
+  // Rating bar width (normalized between 1200-2000 range)
+  const ratingPercent = Math.min(100, Math.max(0, ((hero.rating - 1200) / 800) * 100));
 
   return (
-    <div className={`relative border border-gray-700 rounded-lg p-4 bg-gray-800/50 hover:bg-gray-800/80 transition-colors ${getRankBorderClass()}`}>
-      {/* Rank Badge */}
-      <div
-        className={`absolute -top-2 -left-2 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${getRankBadgeClass()}`}
-      >
-        {rank}
-      </div>
-
-      {/* Hero Image */}
-      <div className="flex justify-center mb-3">
-        <Image
-          src={heroUrl}
-          alt={heroName}
-          width={96}
-          height={128}
-          className="object-cover rounded shadow-lg"
-        />
-      </div>
-
-      {/* Hero Name */}
-      <div className="text-center mb-2">
-        <h3 className="font-bold text-lg truncate" title={heroName}>
-          {heroName}
-        </h3>
-      </div>
-
-      {/* Tier Badge */}
-      <div className="flex justify-center mb-3">
-        <TierBadge rating={heroRating.rating} />
-      </div>
-
-      {/* Elo Rating - Prominent Display */}
-      <div className="text-center mb-3">
-        <span className="text-3xl font-bold text-blue-400">
-          {heroRating.rating}
-        </span>
-        {heroRating.isProvisional && (
-          <span
-            className="ml-1 text-xs bg-yellow-600 text-white px-1.5 py-0.5 rounded"
-            title="Provisional rating - fewer than 20 games played"
-          >
-            ?
-          </span>
-        )}
-      </div>
-
-      {/* Confidence Level Badge */}
-      <div className="text-center mb-3">
-        <span
-          className={`text-xs font-semibold px-2 py-1 rounded ${confidenceColor} bg-gray-900/50`}
-          title={confidenceDesc}
-        >
-          {confidenceLevel} Confidence
-        </span>
-      </div>
-
-      {/* Wilson Score Display */}
-      <div className="text-center mb-3">
-        <div className="text-gray-400 text-xs uppercase mb-1" title="Statistical confidence-adjusted win rate that accounts for sample size">
-          Wilson Score
+    <div className={`border-b-2 border-ink hover:bg-concrete/50 transition-colors ${getRowBorder()}`}>
+      <div className="flex items-center gap-2 sm:gap-3 py-2 px-2 sm:px-3">
+        {/* Rank */}
+        <div className={`w-10 sm:w-12 h-8 flex items-center justify-center border-2 border-ink font-mono text-sm ${getRankStyle()}`}>
+          {String(rank).padStart(3, "0")}
         </div>
-        <div className="relative w-full bg-gray-700 rounded-full h-2 mb-1">
-          <div
-            className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-300"
-            style={{ width: `${heroRating.wilsonScore * 100}%` }}
+
+        {/* Hero Image */}
+        <div className="w-10 h-12 sm:w-12 sm:h-14 relative border-2 border-ink bg-concrete flex-shrink-0">
+          <Image
+            src={heroUrl}
+            alt={hero.heroName}
+            fill
+            className="object-cover"
+            sizes="48px"
           />
         </div>
-        <div className="text-sm font-medium text-blue-300">
-          {formatWilsonScore(heroRating.wilsonScore)}
-        </div>
-      </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-2 text-sm">
-        {/* Win/Loss Record */}
-        <div className="text-center">
-          <div className="text-gray-400 text-xs uppercase">Record</div>
-          <div>
-            <span className="text-green-400">{heroRating.wins}</span>
-            <span className="text-gray-500"> - </span>
-            <span className="text-red-400">{heroRating.losses}</span>
+        {/* Hero Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-display text-sm sm:text-base truncate" title={hero.heroName}>
+              {hero.heroName}
+            </h3>
+            {hero.isProvisional && (
+              <span className="stat-badge text-[10px] bg-champion/20 text-champion border-champion">
+                PROVISIONAL
+              </span>
+            )}
+          </div>
+
+          {/* Rating Bar (mobile hidden) */}
+          <div className="hidden sm:block mt-1">
+            <div className="rating-bar w-32 lg:w-48">
+              <div
+                className="rating-bar-fill-navy"
+                style={{ width: `${ratingPercent}%` }}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Win Rate */}
-        <div className="text-center">
-          <div className="text-gray-400 text-xs uppercase">Win %</div>
-          <div
-            className={
-              heroRating.winRate >= 50 ? "text-green-400" : "text-red-400"
-            }
-          >
-            {winRateFormatted}%
+        {/* Rating */}
+        <div className="text-right">
+          <div className="font-mono text-lg sm:text-xl font-bold text-navy">
+            {hero.rating}
+          </div>
+          <div className={`stat-badge text-[10px] ${tierClass}`}>
+            {tier.name}
           </div>
         </div>
 
-        {/* Games Played */}
-        <div className="text-center">
-          <div className="text-gray-400 text-xs uppercase">Games</div>
-          <div className="text-white">{heroRating.games}</div>
-        </div>
-
-        {/* Current Streak */}
-        <div className="text-center">
-          <div className="text-gray-400 text-xs uppercase">Streak</div>
-          <div>{getStreakDisplay()}</div>
+        {/* Stats (desktop) */}
+        <div className="hidden md:flex items-center gap-3 text-xs font-mono">
+          <div className="w-16 text-center">
+            <div className="text-label">RECORD</div>
+            <div>
+              <span className="text-green-400">{hero.wins}</span>
+              <span className="text-smoke">-</span>
+              <span className="text-signal">{hero.losses}</span>
+            </div>
+          </div>
+          <div className="w-14 text-center">
+            <div className="text-label">WIN%</div>
+            <div className={hero.winRate >= 50 ? "text-green-400" : "text-signal"}>
+              {hero.winRate.toFixed(1)}%
+            </div>
+          </div>
+          <div className="w-14 text-center">
+            <div className="text-label">GAMES</div>
+            <div className="text-charcoal">{hero.games}</div>
+          </div>
+          <div className="w-12 text-center">
+            <div className="text-label">STREAK</div>
+            <div>{streakDisplay}</div>
+          </div>
+          <div className="w-16 text-center">
+            <div className="text-label">WILSON</div>
+            <div className="text-navy">{formatWilsonScore(hero.wilsonScore)}</div>
+          </div>
         </div>
       </div>
     </div>
   );
 };
 
-type SortOption = 'rating' | 'winRate' | 'games' | 'wilsonScore';
+type SortOption = "rating" | "winRate" | "games" | "wilsonScore";
 
-/**
- * Hook to determine the number of columns based on viewport width
- * Matches Tailwind's responsive breakpoints:
- * - default (mobile): 2 columns
- * - sm (640px): 2 columns
- * - md (768px): 3 columns
- * - lg (1024px): 4 columns
- * - xl (1280px): 5 columns
- */
-const useColumnCount = () => {
-  const [columnCount, setColumnCount] = useState(2);
-
-  useEffect(() => {
-    const updateColumnCount = () => {
-      const width = window.innerWidth;
-      if (width >= 1280) {
-        setColumnCount(5); // xl
-      } else if (width >= 1024) {
-        setColumnCount(4); // lg
-      } else if (width >= 768) {
-        setColumnCount(3); // md
-      } else {
-        setColumnCount(2); // sm and below
-      }
-    };
-
-    updateColumnCount();
-    window.addEventListener('resize', updateColumnCount);
-    return () => window.removeEventListener('resize', updateColumnCount);
-  }, []);
-
-  return columnCount;
-};
-
-/**
- * Results page component.
- * Displays all heroes ranked by Elo rating in a responsive virtual-scrolled grid.
- */
 const Results: React.FC<{
   heroRatings: SerializedHeroRating[];
   stats: DashboardStats;
 }> = ({ heroRatings, stats }) => {
   const [showProvisional, setShowProvisional] = useState(true);
-  const [sortBy, setSortBy] = useState<SortOption>('rating');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTier, setSelectedTier] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<SortOption>("rating");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTier, setSelectedTier] = useState<string>("all");
   const parentRef = useRef<HTMLDivElement>(null);
-  const columnCount = useColumnCount();
 
-  // Filter heroes based on search, provisional status, and tier
   const filteredHeroes = heroRatings.filter((hero) => {
-    // Provisional filter
     if (!showProvisional && hero.isProvisional) return false;
-
-    // Search filter
     if (searchQuery && !hero.heroName.toLowerCase().includes(searchQuery.toLowerCase())) {
       return false;
     }
-
-    // Tier filter
-    if (selectedTier !== 'all') {
-      const tier = getTierInfo(hero.rating);
+    if (selectedTier !== "all") {
+      const tier = getTier(hero.rating);
       if (tier.name !== selectedTier) return false;
     }
-
     return true;
   });
 
-  // Sort heroes based on selected option
   const sortedHeroes = [...filteredHeroes].sort((a, b) => {
     switch (sortBy) {
-      case 'rating':
-        return b.rating - a.rating;
-      case 'winRate':
-        return b.winRate - a.winRate;
-      case 'games':
-        return b.games - a.games;
-      case 'wilsonScore':
-        return b.wilsonScore - a.wilsonScore;
-      default:
-        return 0;
+      case "rating": return b.rating - a.rating;
+      case "winRate": return b.winRate - a.winRate;
+      case "games": return b.games - a.games;
+      case "wilsonScore": return b.wilsonScore - a.wilsonScore;
+      default: return 0;
     }
   });
 
-  // Calculate rows based on column count
-  const rowCount = Math.ceil(sortedHeroes.length / columnCount);
-
-  // Virtual scrolling setup
   const rowVirtualizer = useVirtualizer({
-    count: rowCount,
+    count: sortedHeroes.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 520, // Approximate height of a hero card (adjust based on actual card height)
-    overscan: 2, // Render 2 extra rows above and below viewport
+    estimateSize: () => 72,
+    overscan: 10,
   });
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="container mx-auto px-4 py-8">
-        <Head>
-          <title>Hero Rankings - Elo Ratings</title>
-        </Head>
+    <div className="min-h-screen">
+      <Head>
+        <title>HERO RANKINGS — ELO Ratings</title>
+      </Head>
 
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2">Hero Rankings</h1>
-          <p className="text-gray-400">
-            Ranked by Elo rating system based on {heroRatings.length} heroes
-          </p>
+      {/* Header */}
+      <header className="border-b-3 border-ink">
+        <div className="max-w-6xl mx-auto px-3 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-display text-2xl sm:text-3xl">RANKINGS</h1>
+              <p className="font-mono text-xs text-smoke mt-0.5">
+                {stats.totalHeroes} HEROES · {stats.totalVotes} VOTES
+              </p>
+            </div>
+            <Link href="/">
+              <span className="btn-brutal-signal text-xs">
+                VOTE NOW
+              </span>
+            </Link>
+          </div>
         </div>
+      </header>
 
-        {/* Statistics Dashboard */}
-        <StatsDashboard stats={stats} />
+      {/* Stats Bar */}
+      <div className="border-b-2 border-ink bg-concrete">
+        <div className="max-w-6xl mx-auto px-3 py-2">
+          <div className="flex flex-wrap gap-4 sm:gap-6 font-mono text-xs">
+            <div>
+              <span className="text-smoke">TOP HERO: </span>
+              <span className="font-bold text-charcoal">
+                {stats.highestRatedHero?.name || "-"}
+              </span>
+              {stats.highestRatedHero && (
+                <span className="text-navy ml-1">({stats.highestRatedHero.rating})</span>
+              )}
+            </div>
+            <div>
+              <span className="text-smoke">AVG RATING: </span>
+              <span className="font-bold text-charcoal">{Math.round(stats.averageRating)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
-        {/* Search and Filters */}
-        <div className="mb-6 space-y-4">
-          {/* Search Bar */}
-          <div className="bg-gray-800 p-4 rounded-lg">
-            <label htmlFor="search" className="text-gray-400 text-sm font-medium mb-2 block">
-              Search Heroes
-            </label>
+      {/* Filters */}
+      <div className="border-b-2 border-ink">
+        <div className="max-w-6xl mx-auto px-3 py-3">
+          {/* Search */}
+          <div className="mb-3">
             <input
-              id="search"
               type="text"
-              placeholder="Search by name..."
+              placeholder="Search heroes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="input-brutal w-full sm:w-64 text-sm"
             />
           </div>
 
-          {/* Controls */}
-          <div className="bg-gray-800 p-4 rounded-lg space-y-4">
-            {/* Sort Options */}
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-              <label className="text-gray-400 text-sm font-medium whitespace-nowrap">Sort by:</label>
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => setSortBy('rating')}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    sortBy === 'rating'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  Rating
-                </button>
-                <button
-                  onClick={() => setSortBy('wilsonScore')}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    sortBy === 'wilsonScore'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                  title="Sort by confidence-adjusted win rate (accounts for sample size)"
-                >
-                  Wilson Score
-                </button>
-                <button
-                  onClick={() => setSortBy('winRate')}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    sortBy === 'winRate'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  Win Rate
-                </button>
-                <button
-                  onClick={() => setSortBy('games')}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    sortBy === 'games'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  Games Played
-                </button>
+          {/* Sort & Filter Controls */}
+          <div className="flex flex-wrap gap-3 items-center">
+            {/* Sort */}
+            <div className="flex items-center gap-2">
+              <span className="text-label">SORT:</span>
+              <div className="flex gap-1">
+                {(["rating", "wilsonScore", "winRate", "games"] as SortOption[]).map((option) => (
+                  <button
+                    key={option}
+                    onClick={() => setSortBy(option)}
+                    className={`px-2 py-1 font-mono text-xs border-2 border-ink transition-all ${
+                      sortBy === option
+                        ? "bg-ink text-paper shadow-none"
+                        : "bg-paper text-ink hover:bg-concrete"
+                    }`}
+                  >
+                    {option === "wilsonScore" ? "WILSON" : option.toUpperCase()}
+                  </button>
+                ))}
               </div>
             </div>
+
+            <div className="w-px h-6 bg-ink hidden sm:block" />
 
             {/* Tier Filter */}
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-              <label className="text-gray-400 text-sm font-medium whitespace-nowrap">Filter by Tier:</label>
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => setSelectedTier('all')}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    selectedTier === 'all'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  All Tiers
-                </button>
-                <button
-                  onClick={() => setSelectedTier('Diamond')}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    selectedTier === 'Diamond'
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  👑 Diamond
-                </button>
-                <button
-                  onClick={() => setSelectedTier('Platinum')}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    selectedTier === 'Platinum'
-                      ? 'bg-cyan-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  💎 Platinum
-                </button>
-                <button
-                  onClick={() => setSelectedTier('Gold')}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    selectedTier === 'Gold'
-                      ? 'bg-yellow-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  🥇 Gold
-                </button>
-                <button
-                  onClick={() => setSelectedTier('Silver')}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    selectedTier === 'Silver'
-                      ? 'bg-gray-400 text-black'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  🥈 Silver
-                </button>
-                <button
-                  onClick={() => setSelectedTier('Bronze')}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    selectedTier === 'Bronze'
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  🥉 Bronze
-                </button>
+            <div className="flex items-center gap-2">
+              <span className="text-label">TIER:</span>
+              <div className="flex gap-1">
+                {["all", "DIAMOND", "PLATINUM", "GOLD", "SILVER", "BRONZE"].map((tier) => (
+                  <button
+                    key={tier}
+                    onClick={() => setSelectedTier(tier)}
+                    className={`px-2 py-1 font-mono text-xs border-2 border-ink transition-all ${
+                      selectedTier === tier
+                        ? "bg-ink text-paper shadow-none"
+                        : "bg-paper text-ink hover:bg-concrete"
+                    }`}
+                  >
+                    {tier === "all" ? "ALL" : tier.slice(0, 3)}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Provisional Filter */}
-            <div className="flex items-center gap-3 pt-2 border-t border-gray-700">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showProvisional}
-                  onChange={(e) => setShowProvisional(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-900"
-                />
-                <span className="text-sm text-gray-300">Show provisional heroes</span>
-              </label>
-              <span className="text-xs text-gray-500 ml-2">({sortedHeroes.length} heroes shown)</span>
-            </div>
+            <div className="w-px h-6 bg-ink hidden sm:block" />
+
+            {/* Provisional Toggle */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showProvisional}
+                onChange={(e) => setShowProvisional(e.target.checked)}
+                className="checkbox-brutal"
+              />
+              <span className="font-mono text-xs text-charcoal">SHOW PROVISIONAL</span>
+            </label>
+
+            <span className="font-mono text-xs text-smoke ml-auto">
+              {sortedHeroes.length} results
+            </span>
           </div>
         </div>
+      </div>
 
-        {/* Legend */}
-        <div className="mb-6 space-y-4">
-          {/* Confidence Legend */}
-          <div className="flex justify-center gap-4 text-sm text-gray-400 flex-wrap">
-            <div className="flex items-center gap-1">
-              <span className="bg-yellow-600 text-white px-1.5 py-0.5 rounded text-xs">
-                ?
-              </span>
-              <span>Provisional (less than 20 games)</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-green-400">●</span>
-              <span>High Confidence (30+ games)</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-yellow-400">●</span>
-              <span>Medium Confidence (10-29 games)</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-red-400">●</span>
-              <span>Low Confidence (less than 10 games)</span>
-            </div>
-          </div>
-
-          {/* Wilson Score Explanation */}
-          <div className="bg-gray-800/50 rounded-lg p-4 max-w-4xl mx-auto">
-            <h3 className="text-sm font-semibold text-blue-300 mb-2">What is Wilson Score?</h3>
-            <p className="text-xs text-gray-400 leading-relaxed">
-              The Wilson Score is a statistical method that provides a confidence-adjusted win rate. Unlike simple win percentages, it accounts for sample size uncertainty.
-              For example, a hero with 5-0 record (100% win rate) will have a lower Wilson Score than a hero with 95-5 record (95% win rate), because we have much more confidence in the latter.
-              This prevents heroes with lucky early wins from dominating the rankings. It is the same algorithm used by Reddit for comment ranking.
-            </p>
-          </div>
-
-          {/* Tier System Legend */}
-          <div className="bg-gray-800/50 rounded-lg p-4 max-w-4xl mx-auto">
-            <h3 className="text-sm font-semibold text-blue-300 mb-3">Ranking Tiers</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-              <div className="flex flex-col items-center gap-1">
-                <TierBadge rating={1900} />
-                <span className="text-xs text-gray-400">1850+</span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <TierBadge rating={1750} />
-                <span className="text-xs text-gray-400">1700-1849</span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <TierBadge rating={1600} />
-                <span className="text-xs text-gray-400">1550-1699</span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <TierBadge rating={1450} />
-                <span className="text-xs text-gray-400">1400-1549</span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <TierBadge rating={1300} />
-                <span className="text-xs text-gray-400">&lt;1400</span>
-              </div>
-            </div>
+      {/* Table Header */}
+      <div className="border-b-2 border-ink bg-ink text-paper">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center gap-2 sm:gap-3 py-1 px-2 sm:px-3 font-mono text-xs">
+            <div className="w-10 sm:w-12 text-center">#</div>
+            <div className="w-10 sm:w-12"></div>
+            <div className="flex-1">HERO</div>
+            <div className="w-16 text-right">RATING</div>
+            <div className="hidden md:block w-16 text-center">RECORD</div>
+            <div className="hidden md:block w-14 text-center">WIN%</div>
+            <div className="hidden md:block w-14 text-center">GAMES</div>
+            <div className="hidden md:block w-12 text-center">STREAK</div>
+            <div className="hidden md:block w-16 text-center">WILSON</div>
           </div>
         </div>
+      </div>
 
-        {/* Results Grid - Virtualized */}
+      {/* Rankings List */}
+      <main className="max-w-6xl mx-auto">
         {sortedHeroes.length === 0 ? (
-          <div className="text-center text-gray-500 py-12">
-            <p className="text-xl">
-              {heroRatings.length === 0
-                ? 'No heroes have been rated yet.'
-                : 'No heroes match the current filters.'}
-            </p>
-            <p className="mt-2">
-              {heroRatings.length === 0
-                ? 'Start voting to see rankings appear here!'
-                : 'Try adjusting your filters.'}
+          <div className="text-center py-12 border-b-2 border-ink">
+            <p className="font-display text-xl text-charcoal">NO HEROES FOUND</p>
+            <p className="font-mono text-sm text-smoke mt-2">
+              {heroRatings.length === 0 ? "Start voting to see rankings" : "Try adjusting filters"}
             </p>
           </div>
         ) : (
           <div
             ref={parentRef}
-            className="overflow-auto rounded-lg border border-gray-700 bg-gray-800/30 virtual-scroll-container"
-            style={{
-              height: 'calc(100vh - 300px)',
-              minHeight: '600px',
-            }}
+            className="scroll-brutal overflow-auto"
+            style={{ height: "calc(100vh - 280px)", minHeight: "400px" }}
           >
             <div
               style={{
                 height: `${rowVirtualizer.getTotalSize()}px`,
-                width: '100%',
-                position: 'relative',
+                width: "100%",
+                position: "relative",
               }}
             >
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const startIndex = virtualRow.index * columnCount;
-                const rowHeroes = sortedHeroes.slice(startIndex, startIndex + columnCount);
+                const hero = sortedHeroes[virtualRow.index];
+                if (!hero) return null;
 
                 return (
                   <div
                     key={virtualRow.key}
-                    data-index={virtualRow.index}
-                    ref={rowVirtualizer.measureElement}
                     style={{
-                      position: 'absolute',
+                      position: "absolute",
                       top: 0,
                       left: 0,
-                      width: '100%',
+                      width: "100%",
+                      height: `${virtualRow.size}px`,
                       transform: `translateY(${virtualRow.start}px)`,
                     }}
                   >
-                    <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 p-4">
-                      {rowHeroes.map((heroRating, colIndex) => {
-                        const rank = startIndex + colIndex + 1;
-                        return (
-                          <HolographicHeroCard
-                            key={heroRating.heroId}
-                            heroId={heroRating.heroId}
-                            heroName={heroRating.heroName}
-                            rating={heroRating.rating}
-                            rank={rank}
-                            wins={heroRating.wins}
-                            losses={heroRating.losses}
-                            winRate={heroRating.winRate}
-                            games={heroRating.games}
-                            currentStreak={heroRating.currentStreak}
-                            isProvisional={heroRating.isProvisional}
-                            wilsonScore={heroRating.wilsonScore}
-                          />
-                        );
-                      })}
-                      {/* Fill empty columns with skeleton loaders for better visual consistency */}
-                      {rowHeroes.length < columnCount &&
-                        Array.from({ length: columnCount - rowHeroes.length }).map((_, i) => (
-                          <div key={`skeleton-${i}`} className="invisible">
-                            <HolographicSkeleton />
-                          </div>
-                        ))}
-                    </div>
+                    <RankingRow
+                      hero={hero}
+                      rank={virtualRow.index + 1}
+                    />
                   </div>
                 );
               })}
             </div>
           </div>
         )}
-      </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t-2 border-ink mt-auto">
+        <div className="max-w-6xl mx-auto px-3 py-2">
+          <div className="flex flex-wrap justify-between items-center gap-2 font-mono text-xs text-smoke">
+            <div className="flex gap-4">
+              <span>ELO K=32</span>
+              <span>PROVISIONAL &lt;20 GAMES</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="stat-badge tier-diamond text-[10px]">1850+</span>
+              <span className="stat-badge tier-platinum text-[10px]">1700+</span>
+              <span className="stat-badge tier-gold text-[10px]">1550+</span>
+              <span className="stat-badge tier-silver text-[10px]">1400+</span>
+              <span className="stat-badge tier-bronze text-[10px]">&lt;1400</span>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };
 
 export default Results;
 
-/**
- * Calculates dashboard statistics from hero ratings.
- * Uses stored hero names from database - no external API calls needed.
- */
-const calculateStats = (
-  heroRatings: SerializedHeroRating[]
-): DashboardStats => {
-  // Total votes calculation - sum of all games divided by 2 (since each vote involves 2 heroes)
+const calculateStats = (heroRatings: SerializedHeroRating[]): DashboardStats => {
   const totalVotes = Math.floor(
     heroRatings.reduce((sum, hero) => sum + hero.games, 0) / 2
   );
 
-  // Find highest rated hero
   const highestRated = heroRatings.length > 0 ? heroRatings[0] : null;
 
-  // Find most games played hero
-  const mostGames = heroRatings.reduce<SerializedHeroRating | null>(
-    (max, hero) => (!max || hero.games > max.games ? hero : max),
-    null
-  );
-
-  // Calculate average rating
   const averageRating =
     heroRatings.length > 0
       ? heroRatings.reduce((sum, hero) => sum + hero.rating, 0) / heroRatings.length
       : 1500;
 
-  // Use stored hero names directly from database
   const highestRatedHero = highestRated
     ? {
         name: highestRated.heroName,
@@ -776,27 +477,14 @@ const calculateStats = (
       }
     : null;
 
-  const mostGamesHero = mostGames
-    ? {
-        name: mostGames.heroName,
-        games: mostGames.games,
-        heroId: mostGames.heroId,
-      }
-    : null;
-
   return {
     totalVotes,
     totalHeroes: heroRatings.length,
     highestRatedHero,
-    mostGamesHero,
     averageRating,
   };
 };
 
-/**
- * Fetch hero ratings at build time with ISR revalidation.
- * Revalidates every 60 seconds to pick up new votes.
- */
 export const getStaticProps: GetStaticProps = async () => {
   const heroRatings = await getHeroRatings();
   const stats = calculateStats(heroRatings);
@@ -806,6 +494,6 @@ export const getStaticProps: GetStaticProps = async () => {
       heroRatings,
       stats,
     },
-    revalidate: 60, // Revalidate every 60 seconds
+    revalidate: 60,
   };
 };
