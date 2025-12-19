@@ -189,8 +189,8 @@ const RankingRow: React.FC<{
   isLoading: boolean;
   error: string | null;
   onRetry: () => void;
-  onMeasure?: () => void;
-}> = ({ hero, rank, isExpanded, onClick, biography, isLoading, error, onRetry, onMeasure }) => {
+  expandedBioHeight: number;
+}> = ({ hero, rank, isExpanded, onClick, biography, isLoading, error, onRetry, expandedBioHeight }) => {
   const heroUrl = `/api/hero-image/${hero.heroId}`;
   const tier = getTier(hero.rating);
   const tierClass = getTierClass(tier.name);
@@ -341,30 +341,25 @@ const RankingRow: React.FC<{
         {isExpanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
+            animate={{ height: expandedBioHeight, opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{
               duration: 0.25,
               ease: [0.16, 1, 0.3, 1], // Custom easing for smooth animation
             }}
-            style={{ overflow: "hidden" }}
-            onAnimationComplete={() => {
-              // Trigger measurement after animation completes
-              // Use double requestAnimationFrame to ensure DOM is fully updated
-              // This ensures accurate measurement after height animation
-              requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                  onMeasure?.();
-                });
-              });
-            }}
+            style={{ overflow: "hidden", height: expandedBioHeight }}
           >
-            <HeroDescription
-              biography={biography}
-              isLoading={isLoading}
-              error={error}
-              onRetry={onRetry}
-            />
+            <div 
+              className="scroll-brutal"
+              style={{ height: expandedBioHeight, overflowY: "auto" }}
+            >
+              <HeroDescription
+                biography={biography}
+                isLoading={isLoading}
+                error={error}
+                onRetry={onRetry}
+              />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -389,10 +384,8 @@ const Results: React.FC<{
   const parentRef = useRef<HTMLDivElement>(null);
   // Track ongoing fetches to prevent duplicate requests
   const fetchingHeroesRef = useRef<Set<number>>(new Set());
-  // Track scroll position preservation when expanding rows
-  // Stores the hero's position before expansion for restoration after measurement
-  const scrollPreservationRef = useRef<{ heroId: number; scrollTop: number; heroStart: number } | null>(null);
-  const virtualizerRef = useRef<ReturnType<typeof useVirtualizer<HTMLDivElement, Element>> | null>(null);
+  // Fixed height for expanded bio section (prevents jitter from dynamic measurement)
+  const EXPANDED_BIO_HEIGHT = 300; // Fixed height in pixels
   
   // Helper function to fetch hero data via tRPC endpoint
   const fetchHeroData = useCallback(async (heroId: number): Promise<SuperHeroApiResponse> => {
@@ -408,35 +401,14 @@ const Results: React.FC<{
   }, []);
 
   const handleHeroClick = useCallback(async (heroId: number) => {
-    // Find the index of the hero being clicked
-    const heroIndex = sortedHeroes.findIndex((h) => h.heroId === heroId);
-    
     setExpandedHeroIds((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(heroId)) {
         // Collapsing - remove from expanded set
         newSet.delete(heroId);
-        scrollPreservationRef.current = null;
         return newSet;
       } else {
         // Expanding - add to expanded set
-        // Preserve scroll position relative to this hero
-        if (parentRef.current && heroIndex >= 0 && virtualizerRef.current) {
-          const scrollElement = parentRef.current;
-          const currentScrollTop = scrollElement.scrollTop;
-          
-          // Get the hero's current virtual row position before expansion
-          const virtualItems = virtualizerRef.current.getVirtualItems();
-          const virtualRow = virtualItems.find((item) => item.index === heroIndex);
-          
-          if (virtualRow) {
-            scrollPreservationRef.current = {
-              heroId,
-              scrollTop: currentScrollTop,
-              heroStart: virtualRow.start,
-            };
-          }
-        }
         newSet.add(heroId);
         
         // If data not cached and not already fetching, trigger fetch
@@ -608,15 +580,16 @@ const Results: React.FC<{
     }
   });
 
-  // Dynamic row height estimation based on expansion state
+  // Fixed row height estimation based on expansion state
   // Floating cards have margin (my-2 = 16px total) so base height is ~88px
+  // Expanded height is fixed to prevent jitter from dynamic measurement
   const estimateSize = useCallback((index: number) => {
     const hero = sortedHeroes[index];
     if (!hero) return 88;
 
-    // If hero is expanded, return estimated expanded height (including margins)
+    // If hero is expanded, return fixed expanded height (collapsed height + bio height)
     // Otherwise return collapsed height with margins (~88px)
-    return expandedHeroIds.has(hero.heroId) ? 280 : 88;
+    return expandedHeroIds.has(hero.heroId) ? 88 + EXPANDED_BIO_HEIGHT : 88;
   }, [sortedHeroes, expandedHeroIds]);
 
   const rowVirtualizer = useVirtualizer({
@@ -624,21 +597,8 @@ const Results: React.FC<{
     getScrollElement: () => parentRef.current,
     estimateSize,
     overscan: 10,
-    // Enable measurement of actual element sizes for accurate heights
-    // This will measure the actual rendered height including expanded content
-    measureElement: (element) => {
-      if (!element) return 88;
-      // Get the actual height of the element including all children
-      const height = element.getBoundingClientRect().height;
-      return height > 0 ? height : 88;
-    },
+    // No measureElement needed - we use fixed heights for predictable performance
   });
-  
-  // Store virtualizer in ref for access in callbacks
-  virtualizerRef.current = rowVirtualizer;
-
-  // Note: Re-measurement is now handled by onAnimationComplete callback
-  // in RankingRow component to avoid multiple competing measurements that cause jitter
 
   return (
     <div className="min-h-screen">
@@ -795,12 +755,7 @@ const Results: React.FC<{
                     key={virtualRow.key}
                     data-index={virtualRow.index}
                     ref={(element) => {
-                      // Measure element when it mounts or updates
-                      // Only measure if element exists and is not currently animating
-                      // to avoid jitter during expand/collapse animations
-                      if (element) {
-                        rowVirtualizer.measureElement(element);
-                      }
+                      // No measurement needed - we use fixed heights for predictable performance
                     }}
                     style={{
                       position: "absolute",
@@ -819,43 +774,7 @@ const Results: React.FC<{
                       isLoading={loadingHeroes.has(hero.heroId)}
                       error={errorHeroes[hero.heroId] ?? null}
                       onRetry={() => retryHeroFetch(hero.heroId)}
-                      onMeasure={() => {
-                        rowVirtualizer.measure();
-                        
-                        // After measurement, restore scroll position relative to the hero that was expanded
-                        if (scrollPreservationRef.current && parentRef.current) {
-                          const { heroId, scrollTop: oldScrollTop, heroStart: oldHeroStart } = scrollPreservationRef.current;
-                          
-                          // Find the current index of the hero (may have changed due to sorting)
-                          const currentHeroIndex = sortedHeroes.findIndex((h) => h.heroId === heroId);
-                          
-                          if (currentHeroIndex >= 0) {
-                            // Get the hero's new virtual row position after measurement
-                            const virtualItems = rowVirtualizer.getVirtualItems();
-                            const currentVirtualRow = virtualItems.find((item) => item.index === currentHeroIndex);
-                            
-                            if (currentVirtualRow) {
-                              // Calculate how much the hero's position changed
-                              const newHeroStart = currentVirtualRow.start;
-                              const positionDiff = newHeroStart - oldHeroStart;
-                              
-                              // Adjust scroll to maintain relative position
-                              const scrollElement = parentRef.current;
-                              const newScrollTop = oldScrollTop + positionDiff;
-                              
-                              // Use requestAnimationFrame to ensure measurement is complete
-                              requestAnimationFrame(() => {
-                                scrollElement.scrollTop = newScrollTop;
-                                scrollPreservationRef.current = null;
-                              });
-                            } else {
-                              scrollPreservationRef.current = null;
-                            }
-                          } else {
-                            scrollPreservationRef.current = null;
-                          }
-                        }
-                      }}
+                      expandedBioHeight={EXPANDED_BIO_HEIGHT}
                     />
                   </div>
                 );
