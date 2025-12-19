@@ -389,6 +389,10 @@ const Results: React.FC<{
   const parentRef = useRef<HTMLDivElement>(null);
   // Track ongoing fetches to prevent duplicate requests
   const fetchingHeroesRef = useRef<Set<number>>(new Set());
+  // Track scroll position preservation when expanding rows
+  // Stores the hero's position before expansion for restoration after measurement
+  const scrollPreservationRef = useRef<{ heroId: number; scrollTop: number; heroStart: number } | null>(null);
+  const virtualizerRef = useRef<ReturnType<typeof useVirtualizer<HTMLDivElement, Element>> | null>(null);
   
   // Helper function to fetch hero data via tRPC endpoint
   const fetchHeroData = useCallback(async (heroId: number): Promise<SuperHeroApiResponse> => {
@@ -404,14 +408,35 @@ const Results: React.FC<{
   }, []);
 
   const handleHeroClick = useCallback(async (heroId: number) => {
+    // Find the index of the hero being clicked
+    const heroIndex = sortedHeroes.findIndex((h) => h.heroId === heroId);
+    
     setExpandedHeroIds((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(heroId)) {
         // Collapsing - remove from expanded set
         newSet.delete(heroId);
+        scrollPreservationRef.current = null;
         return newSet;
       } else {
         // Expanding - add to expanded set
+        // Preserve scroll position relative to this hero
+        if (parentRef.current && heroIndex >= 0 && virtualizerRef.current) {
+          const scrollElement = parentRef.current;
+          const currentScrollTop = scrollElement.scrollTop;
+          
+          // Get the hero's current virtual row position before expansion
+          const virtualItems = virtualizerRef.current.getVirtualItems();
+          const virtualRow = virtualItems.find((item) => item.index === heroIndex);
+          
+          if (virtualRow) {
+            scrollPreservationRef.current = {
+              heroId,
+              scrollTop: currentScrollTop,
+              heroStart: virtualRow.start,
+            };
+          }
+        }
         newSet.add(heroId);
         
         // If data not cached and not already fetching, trigger fetch
@@ -608,6 +633,9 @@ const Results: React.FC<{
       return height > 0 ? height : 88;
     },
   });
+  
+  // Store virtualizer in ref for access in callbacks
+  virtualizerRef.current = rowVirtualizer;
 
   // Note: Re-measurement is now handled by onAnimationComplete callback
   // in RankingRow component to avoid multiple competing measurements that cause jitter
@@ -791,7 +819,43 @@ const Results: React.FC<{
                       isLoading={loadingHeroes.has(hero.heroId)}
                       error={errorHeroes[hero.heroId] ?? null}
                       onRetry={() => retryHeroFetch(hero.heroId)}
-                      onMeasure={() => rowVirtualizer.measure()}
+                      onMeasure={() => {
+                        rowVirtualizer.measure();
+                        
+                        // After measurement, restore scroll position relative to the hero that was expanded
+                        if (scrollPreservationRef.current && parentRef.current) {
+                          const { heroId, scrollTop: oldScrollTop, heroStart: oldHeroStart } = scrollPreservationRef.current;
+                          
+                          // Find the current index of the hero (may have changed due to sorting)
+                          const currentHeroIndex = sortedHeroes.findIndex((h) => h.heroId === heroId);
+                          
+                          if (currentHeroIndex >= 0) {
+                            // Get the hero's new virtual row position after measurement
+                            const virtualItems = rowVirtualizer.getVirtualItems();
+                            const currentVirtualRow = virtualItems.find((item) => item.index === currentHeroIndex);
+                            
+                            if (currentVirtualRow) {
+                              // Calculate how much the hero's position changed
+                              const newHeroStart = currentVirtualRow.start;
+                              const positionDiff = newHeroStart - oldHeroStart;
+                              
+                              // Adjust scroll to maintain relative position
+                              const scrollElement = parentRef.current;
+                              const newScrollTop = oldScrollTop + positionDiff;
+                              
+                              // Use requestAnimationFrame to ensure measurement is complete
+                              requestAnimationFrame(() => {
+                                scrollElement.scrollTop = newScrollTop;
+                                scrollPreservationRef.current = null;
+                              });
+                            } else {
+                              scrollPreservationRef.current = null;
+                            }
+                          } else {
+                            scrollPreservationRef.current = null;
+                          }
+                        }
+                      }}
                     />
                   </div>
                 );
