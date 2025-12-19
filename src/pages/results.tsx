@@ -349,11 +349,14 @@ const RankingRow: React.FC<{
             }}
             style={{ overflow: "hidden" }}
             onAnimationComplete={() => {
-              // Trigger virtualizer re-measurement after animation completes
-              // Use a small delay to ensure DOM has fully updated
-              setTimeout(() => {
-                onMeasure?.();
-              }, 10);
+              // Trigger measurement after animation completes
+              // Use double requestAnimationFrame to ensure DOM is fully updated
+              // This ensures accurate measurement after height animation
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  onMeasure?.();
+                });
+              });
             }}
           >
             <HeroDescription
@@ -606,24 +609,8 @@ const Results: React.FC<{
     },
   });
 
-  // Force re-measurement when expansion state changes
-  useEffect(() => {
-    // Trigger re-measurement after expansion state changes
-    // Use multiple timeouts to catch both the initial state change and after animation completes
-    const timeout1 = setTimeout(() => {
-      rowVirtualizer.measure();
-    }, 50);
-    
-    const timeout2 = setTimeout(() => {
-      // Re-measure after animation completes (250ms animation + buffer)
-      rowVirtualizer.measure();
-    }, 300);
-
-    return () => {
-      clearTimeout(timeout1);
-      clearTimeout(timeout2);
-    };
-  }, [expandedHeroIds, rowVirtualizer]);
+  // Note: Re-measurement is now handled by onAnimationComplete callback
+  // in RankingRow component to avoid multiple competing measurements that cause jitter
 
   return (
     <div className="min-h-screen">
@@ -781,11 +768,10 @@ const Results: React.FC<{
                     data-index={virtualRow.index}
                     ref={(element) => {
                       // Measure element when it mounts or updates
+                      // Only measure if element exists and is not currently animating
+                      // to avoid jitter during expand/collapse animations
                       if (element) {
-                        // Use requestAnimationFrame to ensure DOM is ready
-                        requestAnimationFrame(() => {
-                          rowVirtualizer.measureElement(element);
-                        });
+                        rowVirtualizer.measureElement(element);
                       }
                     }}
                     style={{
