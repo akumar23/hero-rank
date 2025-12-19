@@ -10,7 +10,6 @@ import {
   formatWilsonScore
 } from "../utils/wilsonScore";
 import { trpc } from "../utils/trpc";
-import { useQueryClient } from "react-query";
 import { HeroDescription } from "../components/HeroDescription";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -385,9 +384,21 @@ const Results: React.FC<{
   const [loadingHeroes, setLoadingHeroes] = useState<Set<number>>(new Set());
   const [errorHeroes, setErrorHeroes] = useState<Record<number, string>>({});
   const parentRef = useRef<HTMLDivElement>(null);
-  const queryClient = useQueryClient();
   // Track ongoing fetches to prevent duplicate requests
   const fetchingHeroesRef = useRef<Set<number>>(new Set());
+  
+  // Helper function to fetch hero data via tRPC endpoint
+  const fetchHeroData = useCallback(async (heroId: number): Promise<SuperHeroApiResponse> => {
+    // tRPC v9 endpoint format: /api/trpc/[procedure]?input=...
+    const input = JSON.stringify({ id: heroId });
+    const response = await fetch(`/api/trpc/get-hero-by-id?input=${encodeURIComponent(input)}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    // tRPC v9 response format: { result: { data: ... } }
+    return data.result?.data || data;
+  }, []);
 
   const handleHeroClick = useCallback(async (heroId: number) => {
     setExpandedHeroIds((prev) => {
@@ -419,13 +430,9 @@ const Results: React.FC<{
             return newErrors;
           });
           
-          // Fetch hero data using tRPC query
-          queryClient
-            .fetchQuery(["get-hero-by-id", { id: heroId }])
-            .then((data: unknown) => {
-              // Check if API response is valid
-              const apiResponse = data as SuperHeroApiResponse;
-              
+          // Fetch hero data using tRPC endpoint
+          fetchHeroData(heroId)
+            .then((apiResponse) => {
               // Handle API error responses
               if (apiResponse.response === "error") {
                 throw new Error(apiResponse.error || "Hero not found");
@@ -476,7 +483,7 @@ const Results: React.FC<{
         return newSet;
       }
     });
-  }, [heroDataCache, queryClient]);
+  }, [heroDataCache, fetchHeroData]);
 
   const retryHeroFetch = useCallback(async (heroId: number) => {
     // Prevent duplicate retry requests
@@ -502,9 +509,8 @@ const Results: React.FC<{
     });
 
     try {
-      // Fetch hero data using tRPC query
-      const data = await queryClient.fetchQuery(["get-hero-by-id", { id: heroId }]);
-      const apiResponse = data as SuperHeroApiResponse;
+      // Fetch hero data using tRPC endpoint
+      const apiResponse = await fetchHeroData(heroId);
       
       // Check if API response is valid
       if (apiResponse.response === "error") {
@@ -550,7 +556,7 @@ const Results: React.FC<{
         return newLoading;
       });
     }
-  }, [queryClient]);
+  }, [fetchHeroData]);
 
   const filteredHeroes = heroRatings.filter((hero) => {
     if (!showProvisional && hero.isProvisional) return false;
