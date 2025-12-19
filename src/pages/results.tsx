@@ -190,7 +190,8 @@ const RankingRow: React.FC<{
   isLoading: boolean;
   error: string | null;
   onRetry: () => void;
-}> = ({ hero, rank, isExpanded, onClick, biography, isLoading, error, onRetry }) => {
+  onMeasure?: () => void;
+}> = ({ hero, rank, isExpanded, onClick, biography, isLoading, error, onRetry, onMeasure }) => {
   const heroUrl = `/api/hero-image/${hero.heroId}`;
   const tier = getTier(hero.rating);
   const tierClass = getTierClass(tier.name);
@@ -220,18 +221,10 @@ const RankingRow: React.FC<{
   const ratingPercent = Math.min(100, Math.max(0, ((hero.rating - 1200) / 800) * 100));
 
   return (
-    <motion.div
-      layout
+    <div
       className={`floating-card my-2 mx-1 sm:mx-2 overflow-hidden ${getRankAccent()} ${
         isExpanded ? `floating-card-expanded ${tierExpandedBg}` : ""
       }`}
-      animate={{
-        scale: isExpanded ? 1.01 : 1,
-      }}
-      transition={{
-        duration: 0.3,
-        ease: [0.25, 0.1, 0.25, 1],
-      }}
     >
       <div
         onClick={onClick}
@@ -356,6 +349,13 @@ const RankingRow: React.FC<{
               ease: [0.16, 1, 0.3, 1], // Custom easing for smooth animation
             }}
             style={{ overflow: "hidden" }}
+            onAnimationComplete={() => {
+              // Trigger virtualizer re-measurement after animation completes
+              // Use a small delay to ensure DOM has fully updated
+              setTimeout(() => {
+                onMeasure?.();
+              }, 10);
+            }}
           >
             <HeroDescription
               biography={biography}
@@ -366,7 +366,7 @@ const RankingRow: React.FC<{
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 };
 
@@ -591,25 +591,32 @@ const Results: React.FC<{
     estimateSize,
     overscan: 10,
     // Enable measurement of actual element sizes for accurate heights
-    measureElement: (element) => element?.getBoundingClientRect().height ?? 88,
+    // This will measure the actual rendered height including expanded content
+    measureElement: (element) => {
+      if (!element) return 88;
+      // Get the actual height of the element including all children
+      const height = element.getBoundingClientRect().height;
+      return height > 0 ? height : 88;
+    },
   });
 
   // Force re-measurement when expansion state changes
   useEffect(() => {
-    // Trigger re-measurement for all visible virtual items when expansion state changes
-    // This ensures the virtualizer recalculates heights after rows expand/collapse
-    // Use a small timeout to ensure DOM has updated after state change
-    const timeoutId = setTimeout(() => {
-      const virtualItems = rowVirtualizer.getVirtualItems();
-      virtualItems.forEach((virtualItem) => {
-        const element = parentRef.current?.querySelector(`[data-index="${virtualItem.index}"]`) as HTMLElement;
-        if (element) {
-          rowVirtualizer.measureElement(element);
-        }
-      });
-    }, 0);
+    // Trigger re-measurement after expansion state changes
+    // Use multiple timeouts to catch both the initial state change and after animation completes
+    const timeout1 = setTimeout(() => {
+      rowVirtualizer.measure();
+    }, 50);
+    
+    const timeout2 = setTimeout(() => {
+      // Re-measure after animation completes (250ms animation + buffer)
+      rowVirtualizer.measure();
+    }, 300);
 
-    return () => clearTimeout(timeoutId);
+    return () => {
+      clearTimeout(timeout1);
+      clearTimeout(timeout2);
+    };
   }, [expandedHeroIds, rowVirtualizer]);
 
   return (
@@ -769,7 +776,10 @@ const Results: React.FC<{
                     ref={(element) => {
                       // Measure element when it mounts or updates
                       if (element) {
-                        rowVirtualizer.measureElement(element);
+                        // Use requestAnimationFrame to ensure DOM is ready
+                        requestAnimationFrame(() => {
+                          rowVirtualizer.measureElement(element);
+                        });
                       }
                     }}
                     style={{
@@ -777,7 +787,6 @@ const Results: React.FC<{
                       top: 0,
                       left: 0,
                       width: "100%",
-                      height: `${virtualRow.size}px`,
                       transform: `translateY(${virtualRow.start}px)`,
                     }}
                   >
@@ -790,6 +799,7 @@ const Results: React.FC<{
                       isLoading={loadingHeroes.has(hero.heroId)}
                       error={errorHeroes[hero.heroId] ?? null}
                       onRetry={() => retryHeroFetch(hero.heroId)}
+                      onMeasure={() => rowVirtualizer.measure()}
                     />
                   </div>
                 );
