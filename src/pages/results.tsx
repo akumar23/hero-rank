@@ -750,6 +750,8 @@ const Results: React.FC<{
                 const hero = sortedHeroes[virtualRow.index];
                 if (!hero) return null;
 
+                const isRowExpanded = expandedHeroIds.has(hero.heroId);
+                
                 return (
                   <div
                     key={virtualRow.key}
@@ -763,6 +765,7 @@ const Results: React.FC<{
                       left: 0,
                       width: "100%",
                       transform: `translateY(${virtualRow.start}px)`,
+                      zIndex: isRowExpanded ? 10 : 1, // Higher z-index when expanded to appear above other rows
                     }}
                   >
                     <RankingRow
