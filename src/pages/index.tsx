@@ -24,7 +24,8 @@ import {
   addDiscoveredHeroes,
 } from "../components/DiscoveryTracker";
 import { useQueryClient } from "react-query";
-import { HeroCard } from "../components/HeroCard";
+import { HeroCardContainer } from "../components/HeroCardContainer";
+import { extractBiographyData, type SuperHeroApiResponse } from "../types/heroBiography";
 
 export default function Home() {
   const queryClient = useQueryClient();
@@ -77,6 +78,14 @@ export default function Home() {
 
   const hero1Url = id1 ? `/api/hero-image/${id1}` : "";
   const hero2Url = id2 ? `/api/hero-image/${id2}` : "";
+
+  // Extract biography data from query results
+  const hero1Biography = firstHeroQuery.data
+    ? extractBiographyData(firstHeroQuery.data as SuperHeroApiResponse)
+    : null;
+  const hero2Biography = secondHeroQuery.data
+    ? extractBiographyData(secondHeroQuery.data as SuperHeroApiResponse)
+    : null;
 
   const voteMutate = trpc.useMutation(["cast-vote"]);
 
@@ -171,12 +180,13 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 mb-6">
             {/* Hero 1 */}
             <div key={id1} className="animate-entrance-left">
-              <HeroCard
+              <HeroCardContainer
                 heroUrl={hero1Url}
                 heroName={hero1Name}
                 heroId={id1}
+                biography={hero1Biography}
                 isLoading={firstHeroQuery.isLoading}
-                onClick={() => vote(id1)}
+                onVote={() => vote(id1)}
               />
             </div>
 
@@ -192,12 +202,13 @@ export default function Home() {
 
             {/* Hero 2 */}
             <div key={id2} className="animate-entrance-right">
-              <HeroCard
+              <HeroCardContainer
                 heroUrl={hero2Url}
                 heroName={hero2Name}
                 heroId={id2}
+                biography={hero2Biography}
                 isLoading={secondHeroQuery.isLoading}
-                onClick={() => vote(id2)}
+                onVote={() => vote(id2)}
               />
             </div>
           </div>
