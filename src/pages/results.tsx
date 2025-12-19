@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { turso } from "../utils/turso";
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import {
   wilsonScore,
   formatWilsonScore
@@ -189,8 +189,7 @@ const RankingRow: React.FC<{
   isLoading: boolean;
   error: string | null;
   onRetry: () => void;
-  expandedBioHeight: number;
-}> = ({ hero, rank, isExpanded, onClick, biography, isLoading, error, onRetry, expandedBioHeight }) => {
+}> = ({ hero, rank, isExpanded, onClick, biography, isLoading, error, onRetry }) => {
   const heroUrl = `/api/hero-image/${hero.heroId}`;
   const tier = getTier(hero.rating);
   const tierClass = getTierClass(tier.name);
@@ -336,30 +335,21 @@ const RankingRow: React.FC<{
         </div>
       </div>
       
-      {/* Expanded Description with Animation */}
+      {/* Expanded Description - opacity animation only, height handled by virtualizer measurement */}
       <AnimatePresence initial={false}>
         {isExpanded && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: expandedBioHeight, opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{
-              duration: 0.25,
-              ease: [0.16, 1, 0.3, 1], // Custom easing for smooth animation
-            }}
-            style={{ overflow: "hidden", height: expandedBioHeight }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
           >
-            <div 
-              className="scroll-brutal"
-              style={{ height: expandedBioHeight, overflowY: "auto" }}
-            >
-              <HeroDescription
-                biography={biography}
-                isLoading={isLoading}
-                error={error}
-                onRetry={onRetry}
-              />
-            </div>
+            <HeroDescription
+              biography={biography}
+              isLoading={isLoading}
+              error={error}
+              onRetry={onRetry}
+            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -381,11 +371,11 @@ const Results: React.FC<{
   const [heroDataCache, setHeroDataCache] = useState<Record<number, HeroBiography | null>>({});
   const [loadingHeroes, setLoadingHeroes] = useState<Set<number>>(new Set());
   const [errorHeroes, setErrorHeroes] = useState<Record<number, string>>({});
-  const parentRef = useRef<HTMLDivElement>(null);
+  const listContainerRef = useRef<HTMLDivElement>(null);
   // Track ongoing fetches to prevent duplicate requests
   const fetchingHeroesRef = useRef<Set<number>>(new Set());
-  // Fixed height for expanded bio section (prevents jitter from dynamic measurement)
-  const EXPANDED_BIO_HEIGHT = 300; // Fixed height in pixels
+  // Track scroll margin (distance from top of document to list) for window virtualizer
+  const [scrollMargin, setScrollMargin] = useState(0);
   
   // Helper function to fetch hero data via tRPC endpoint
   const fetchHeroData = useCallback(async (heroId: number): Promise<SuperHeroApiResponse> => {
@@ -580,24 +570,64 @@ const Results: React.FC<{
     }
   });
 
-  // Fixed row height estimation based on expansion state
-  // Floating cards have margin (my-2 = 16px total) so base height is ~88px
-  // Expanded height is fixed to prevent jitter from dynamic measurement
+  // Calculate scroll margin when component mounts and on resize
+  // This tells the window virtualizer where the list starts relative to document top
+  useEffect(() => {
+    const updateScrollMargin = () => {
+      if (listContainerRef.current) {
+        const rect = listContainerRef.current.getBoundingClientRect();
+        setScrollMargin(rect.top + window.scrollY);
+      }
+    };
+
+    // Initial calculation after render
+    updateScrollMargin();
+
+    // Recalculate on resize (header height might change on mobile)
+    window.addEventListener("resize", updateScrollMargin);
+    return () => window.removeEventListener("resize", updateScrollMargin);
+  }, []);
+
+  // Smart row height estimation based on expansion state and data availability
+  // Floating cards have margin (my-2 = 16px total) so base collapsed height is ~88px
+  // Expanded heights vary based on loading/error/loaded states
   const estimateSize = useCallback((index: number) => {
     const hero = sortedHeroes[index];
     if (!hero) return 88;
 
-    // If hero is expanded, return fixed expanded height (collapsed height + bio height)
-    // Otherwise return collapsed height with margins (~88px)
-    return expandedHeroIds.has(hero.heroId) ? 88 + EXPANDED_BIO_HEIGHT : 88;
-  }, [sortedHeroes, expandedHeroIds]);
+    // Collapsed row
+    if (!expandedHeroIds.has(hero.heroId)) {
+      return 88;
+    }
 
-  const rowVirtualizer = useVirtualizer({
+    // Expanded row - estimate based on current state
+    const heroId = hero.heroId;
+
+    // Loading state: skeleton + text ≈ 120px
+    if (loadingHeroes.has(heroId)) {
+      return 88 + 130;
+    }
+
+    // Error state: error message + retry button ≈ 140px
+    if (errorHeroes[heroId]) {
+      return 88 + 150;
+    }
+
+    // Loaded with data: bio content varies but typically 180-350px
+    // Using 280px as reasonable average for 2-column grid layout
+    if (heroDataCache[heroId]) {
+      return 88 + 280;
+    }
+
+    // Just expanded, data not yet loading (brief moment)
+    return 88 + 130;
+  }, [sortedHeroes, expandedHeroIds, loadingHeroes, errorHeroes, heroDataCache]);
+
+  const rowVirtualizer = useWindowVirtualizer({
     count: sortedHeroes.length,
-    getScrollElement: () => parentRef.current,
     estimateSize,
-    overscan: 10,
-    // No measureElement needed - we use fixed heights for predictable performance
+    overscan: 5,
+    scrollMargin,
   });
 
   return (
@@ -724,7 +754,7 @@ const Results: React.FC<{
         </div>
       </div>
 
-      {/* Rankings List */}
+      {/* Rankings List - uses window scroll via useWindowVirtualizer */}
       <main className="max-w-6xl mx-auto px-2 sm:px-4 py-4">
         {sortedHeroes.length === 0 ? (
           <div className="text-center py-12 floating-card">
@@ -735,54 +765,46 @@ const Results: React.FC<{
           </div>
         ) : (
           <div
-            ref={parentRef}
-            className="scroll-brutal overflow-auto"
-            style={{ height: "calc(100vh - 300px)", minHeight: "400px" }}
+            ref={listContainerRef}
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
           >
-            <div
-              style={{
-                height: `${rowVirtualizer.getTotalSize()}px`,
-                width: "100%",
-                position: "relative",
-              }}
-            >
-              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const hero = sortedHeroes[virtualRow.index];
-                if (!hero) return null;
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const hero = sortedHeroes[virtualRow.index];
+              if (!hero) return null;
 
-                const isRowExpanded = expandedHeroIds.has(hero.heroId);
-                
-                return (
-                  <div
-                    key={virtualRow.key}
-                    data-index={virtualRow.index}
-                    ref={(element) => {
-                      // No measurement needed - we use fixed heights for predictable performance
-                    }}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      transform: `translateY(${virtualRow.start}px)`,
-                      zIndex: isRowExpanded ? 10 : 1, // Higher z-index when expanded to appear above other rows
-                    }}
-                  >
-                    <RankingRow
-                      hero={hero}
-                      rank={virtualRow.index + 1}
-                      isExpanded={expandedHeroIds.has(hero.heroId)}
-                      onClick={() => handleHeroClick(hero.heroId)}
-                      biography={heroDataCache[hero.heroId] ?? null}
-                      isLoading={loadingHeroes.has(hero.heroId)}
-                      error={errorHeroes[hero.heroId] ?? null}
-                      onRetry={() => retryHeroFetch(hero.heroId)}
-                      expandedBioHeight={EXPANDED_BIO_HEIGHT}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+              const isRowExpanded = expandedHeroIds.has(hero.heroId);
+
+              return (
+                <div
+                  key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualRow.start - scrollMargin}px)`,
+                    zIndex: isRowExpanded ? 10 : 1,
+                  }}
+                >
+                  <RankingRow
+                    hero={hero}
+                    rank={virtualRow.index + 1}
+                    isExpanded={isRowExpanded}
+                    onClick={() => handleHeroClick(hero.heroId)}
+                    biography={heroDataCache[hero.heroId] ?? null}
+                    isLoading={loadingHeroes.has(hero.heroId)}
+                    error={errorHeroes[hero.heroId] ?? null}
+                    onRetry={() => retryHeroFetch(hero.heroId)}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
       </main>
