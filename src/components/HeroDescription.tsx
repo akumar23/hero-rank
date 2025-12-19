@@ -1,5 +1,5 @@
 import React from "react";
-import type { HeroBiography } from "../pages/results";
+import type { HeroBiography } from "../types/heroBiography";
 
 export interface HeroDescriptionProps {
   biography: HeroBiography | null;
