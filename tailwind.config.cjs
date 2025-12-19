@@ -15,6 +15,14 @@ module.exports = {
         champion: "#F4A200",
         silver: "#8B8B8B",
         bronze: "#A0522D",
+        // Tier background colors for expanded state (Stripe Press inspired)
+        'tier-bg': {
+          diamond: "#0a1628",    // Deep navy tint
+          platinum: "#1a1a1f",   // Subtle cool gray
+          gold: "#1a1508",       // Warm amber tint
+          silver: "#151518",     // Neutral dark
+          bronze: "#1a1210",     // Warm brown tint
+        },
       },
       // Typography
       fontFamily: {
@@ -41,6 +49,10 @@ module.exports = {
         'brutal-signal': '4px 4px 0 #E63946',
         'brutal-navy': '4px 4px 0 #1D3557',
         'brutal-inset': 'inset 2px 2px 0 #E8E8E8',
+        // Floating card shadows (Stripe Press inspired)
+        'floating': '0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1)',
+        'floating-hover': '0 8px 24px rgba(0, 0, 0, 0.2), 0 4px 8px rgba(0, 0, 0, 0.15)',
+        'floating-expanded': '0 12px 32px rgba(0, 0, 0, 0.25), 0 6px 12px rgba(0, 0, 0, 0.18)',
       },
       // Animation
       animation: {

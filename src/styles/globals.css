@@ -115,6 +115,45 @@
   }
 
   /* ============================================
+     FLOATING CARD (STRIPE PRESS INSPIRED)
+     ============================================ */
+  .floating-card {
+    @apply bg-paper rounded-lg shadow-floating
+           transition-all duration-300 ease-out;
+    transform: translateY(0);
+  }
+
+  .floating-card:hover {
+    @apply shadow-floating-hover;
+    transform: translateY(-2px);
+  }
+
+  .floating-card-expanded {
+    @apply shadow-floating-expanded;
+  }
+
+  /* Tier background transitions for expanded state */
+  .tier-expanded-diamond {
+    background-color: #0a1628;
+  }
+
+  .tier-expanded-platinum {
+    background-color: #1a1a1f;
+  }
+
+  .tier-expanded-gold {
+    background-color: #1a1508;
+  }
+
+  .tier-expanded-silver {
+    background-color: #151518;
+  }
+
+  .tier-expanded-bronze {
+    background-color: #1a1210;
+  }
+
+  /* ============================================
      RATING BAR
      ============================================ */
   .rating-bar {

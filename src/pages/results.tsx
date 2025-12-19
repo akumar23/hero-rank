@@ -3,12 +3,16 @@ import Head from "next/head";
 import Image from "next/image";
 import Link from "next/link";
 import { turso } from "../utils/turso";
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   wilsonScore,
   formatWilsonScore
 } from "../utils/wilsonScore";
+import { trpc } from "../utils/trpc";
+import { useQueryClient } from "react-query";
+import { HeroDescription } from "../components/HeroDescription";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface SerializedHeroRating {
   heroId: number;
@@ -30,6 +34,90 @@ interface DashboardStats {
   averageRating: number;
 }
 
+/**
+ * Hero biography data extracted from SuperHero API response.
+ * The API returns nested objects (biography, work, connections),
+ * but we'll store a flattened version for easier access.
+ */
+export interface HeroBiography {
+  "full-name": string;
+  "alter-egos": string;
+  aliases: string[];
+  "place-of-birth": string;
+  "first-appearance": string;
+  publisher: string;
+  alignment: string;
+  occupation: string;
+  "base-of-operations": string;
+  "group-affiliation": string;
+  relatives: string;
+}
+
+/**
+ * Full SuperHero API response structure.
+ * Used for type safety when fetching hero data.
+ */
+interface SuperHeroApiResponse {
+  response: string;
+  id?: string;
+  name?: string;
+  error?: string;
+  powerstats?: Record<string, string>;
+  biography?: {
+    "full-name": string;
+    "alter-egos": string;
+    aliases: string[];
+    "place-of-birth": string;
+    "first-appearance": string;
+    publisher: string;
+    alignment: string;
+  };
+  appearance?: Record<string, unknown>;
+  work?: {
+    occupation: string;
+    base: string; // This is "base-of-operations"
+  };
+  connections?: {
+    "group-affiliation": string;
+    relatives: string;
+  };
+  image?: {
+    url: string;
+  };
+}
+
+/**
+ * Extracts biography data from SuperHero API response and converts to HeroBiography format.
+ */
+function extractBiographyData(apiResponse: SuperHeroApiResponse): HeroBiography {
+  // Handle missing biography data gracefully
+  const biography = apiResponse.biography || {
+    "full-name": "",
+    "alter-egos": "",
+    aliases: [],
+    "place-of-birth": "",
+    "first-appearance": "",
+    publisher: "",
+    alignment: "",
+  };
+  const work = apiResponse.work || { occupation: "", base: "" };
+  const connections = apiResponse.connections || { "group-affiliation": "", relatives: "" };
+  
+  return {
+    "full-name": biography["full-name"] || "",
+    "alter-egos": biography["alter-egos"] || "",
+    aliases: biography.aliases || [],
+    "place-of-birth": biography["place-of-birth"] || "",
+    "first-appearance": biography["first-appearance"] || "",
+    publisher: biography.publisher || "",
+    alignment: biography.alignment || "",
+    occupation: work.occupation || "",
+    "base-of-operations": work.base || "",
+    "group-affiliation": connections["group-affiliation"] || "",
+    relatives: connections.relatives || "",
+  };
+}
+
 type TierName = "DIAMOND" | "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
 
 const getTier = (rating: number): { name: TierName; min: number } => {
@@ -47,6 +135,16 @@ const getTierClass = (tier: TierName): string => {
     case "GOLD": return "tier-gold";
     case "SILVER": return "tier-silver";
     case "BRONZE": return "tier-bronze";
+  }
+};
+
+const getTierExpandedBg = (tier: TierName): string => {
+  switch (tier) {
+    case "DIAMOND": return "tier-expanded-diamond";
+    case "PLATINUM": return "tier-expanded-platinum";
+    case "GOLD": return "tier-expanded-gold";
+    case "SILVER": return "tier-expanded-silver";
+    case "BRONZE": return "tier-expanded-bronze";
   }
 };
 
@@ -86,10 +184,17 @@ const getHeroRatings = async (): Promise<SerializedHeroRating[]> => {
 const RankingRow: React.FC<{
   hero: SerializedHeroRating;
   rank: number;
-}> = ({ hero, rank }) => {
+  isExpanded: boolean;
+  onClick: () => void;
+  biography: HeroBiography | null;
+  isLoading: boolean;
+  error: string | null;
+  onRetry: () => void;
+}> = ({ hero, rank, isExpanded, onClick, biography, isLoading, error, onRetry }) => {
   const heroUrl = `/api/hero-image/${hero.heroId}`;
   const tier = getTier(hero.rating);
   const tierClass = getTierClass(tier.name);
+  const tierExpandedBg = getTierExpandedBg(tier.name);
 
   const getRankStyle = () => {
     if (rank === 1) return "bg-champion text-ink font-bold";
@@ -98,10 +203,10 @@ const RankingRow: React.FC<{
     return "bg-paper text-charcoal";
   };
 
-  const getRowBorder = () => {
-    if (rank === 1) return "border-l-4 border-l-champion bg-champion/5";
-    if (rank === 2) return "border-l-4 border-l-silver bg-silver/5";
-    if (rank === 3) return "border-l-4 border-l-bronze bg-bronze/5";
+  const getRankAccent = () => {
+    if (rank === 1) return "border-l-4 border-l-champion";
+    if (rank === 2) return "border-l-4 border-l-silver";
+    if (rank === 3) return "border-l-4 border-l-bronze";
     return "";
   };
 
@@ -115,8 +220,49 @@ const RankingRow: React.FC<{
   const ratingPercent = Math.min(100, Math.max(0, ((hero.rating - 1200) / 800) * 100));
 
   return (
-    <div className={`hover:bg-concrete/50 transition-colors ${getRowBorder()}`}>
-      <div className="flex items-center gap-2 sm:gap-3 py-2 px-2 sm:px-3">
+    <motion.div
+      layout
+      className={`floating-card my-2 mx-1 sm:mx-2 overflow-hidden ${getRankAccent()} ${
+        isExpanded ? `floating-card-expanded ${tierExpandedBg}` : ""
+      }`}
+      animate={{
+        scale: isExpanded ? 1.01 : 1,
+      }}
+      transition={{
+        duration: 0.3,
+        ease: [0.25, 0.1, 0.25, 1],
+      }}
+    >
+      <div
+        onClick={onClick}
+        className="flex items-center gap-2 sm:gap-3 py-3 px-3 sm:px-4 cursor-pointer hover:bg-concrete/30 transition-colors"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClick();
+          }
+        }}
+        aria-expanded={isExpanded}
+      >
+        {/* Expand/Collapse Indicator */}
+        <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
+          <svg
+            className={`w-3 h-3 text-charcoal transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={3}
+              d="M9 5l7 7-7 7"
+            />
+          </svg>
+        </div>
         {/* Rank */}
         <div className={`w-10 sm:w-12 h-8 flex items-center justify-center border-2 border-ink font-mono text-sm ${getRankStyle()}`}>
           {String(rank).padStart(3, "0")}
@@ -197,7 +343,30 @@ const RankingRow: React.FC<{
           </div>
         </div>
       </div>
-    </div>
+      
+      {/* Expanded Description with Animation */}
+      <AnimatePresence initial={false}>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{
+              duration: 0.25,
+              ease: [0.16, 1, 0.3, 1], // Custom easing for smooth animation
+            }}
+            style={{ overflow: "hidden" }}
+          >
+            <HeroDescription
+              biography={biography}
+              isLoading={isLoading}
+              error={error}
+              onRetry={onRetry}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 };
 
@@ -211,7 +380,177 @@ const Results: React.FC<{
   const [sortBy, setSortBy] = useState<SortOption>("rating");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTier, setSelectedTier] = useState<string>("all");
+  const [expandedHeroIds, setExpandedHeroIds] = useState<Set<number>>(new Set());
+  const [heroDataCache, setHeroDataCache] = useState<Record<number, HeroBiography | null>>({});
+  const [loadingHeroes, setLoadingHeroes] = useState<Set<number>>(new Set());
+  const [errorHeroes, setErrorHeroes] = useState<Record<number, string>>({});
   const parentRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
+  // Track ongoing fetches to prevent duplicate requests
+  const fetchingHeroesRef = useRef<Set<number>>(new Set());
+
+  const handleHeroClick = useCallback(async (heroId: number) => {
+    setExpandedHeroIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(heroId)) {
+        // Collapsing - remove from expanded set
+        newSet.delete(heroId);
+        return newSet;
+      } else {
+        // Expanding - add to expanded set
+        newSet.add(heroId);
+        
+        // If data not cached and not already fetching, trigger fetch
+        if (!(heroId in heroDataCache) && !fetchingHeroesRef.current.has(heroId)) {
+          // Mark as fetching to prevent duplicate requests
+          fetchingHeroesRef.current.add(heroId);
+          
+          // Set loading state
+          setLoadingHeroes((prevLoading) => {
+            const newLoading = new Set(prevLoading);
+            newLoading.add(heroId);
+            return newLoading;
+          });
+          
+          // Clear any previous error for this hero
+          setErrorHeroes((prevErrors) => {
+            const newErrors = { ...prevErrors };
+            delete newErrors[heroId];
+            return newErrors;
+          });
+          
+          // Fetch hero data using tRPC query
+          queryClient
+            .fetchQuery(["get-hero-by-id", { id: heroId }])
+            .then((data: unknown) => {
+              // Check if API response is valid
+              const apiResponse = data as SuperHeroApiResponse;
+              
+              // Handle API error responses
+              if (apiResponse.response === "error") {
+                throw new Error(apiResponse.error || "Hero not found");
+              }
+              
+              // Extract biography data and cache it
+              const biographyData = extractBiographyData(apiResponse);
+              setHeroDataCache((prevCache) => ({
+                ...prevCache,
+                [heroId]: biographyData,
+              }));
+            })
+            .catch((error: unknown) => {
+              // Handle error - check for network errors, API errors, etc.
+              let errorMessage = "Failed to fetch hero data";
+              
+              if (error instanceof Error) {
+                errorMessage = error.message;
+              } else if (typeof error === "string") {
+                errorMessage = error;
+              }
+              
+              // Provide user-friendly error messages
+              if (errorMessage.includes("fetch") || errorMessage.includes("network")) {
+                errorMessage = "Network error. Please check your connection.";
+              } else if (errorMessage.includes("not found") || errorMessage.includes("404")) {
+                errorMessage = "Hero data not available.";
+              }
+              
+              setErrorHeroes((prevErrors) => ({
+                ...prevErrors,
+                [heroId]: errorMessage,
+              }));
+            })
+            .finally(() => {
+              // Clear fetching flag
+              fetchingHeroesRef.current.delete(heroId);
+              
+              // Clear loading state
+              setLoadingHeroes((prevLoading) => {
+                const newLoading = new Set(prevLoading);
+                newLoading.delete(heroId);
+                return newLoading;
+              });
+            });
+        }
+        
+        return newSet;
+      }
+    });
+  }, [heroDataCache, queryClient]);
+
+  const retryHeroFetch = useCallback(async (heroId: number) => {
+    // Prevent duplicate retry requests
+    if (fetchingHeroesRef.current.has(heroId)) {
+      return;
+    }
+    
+    // Mark as fetching
+    fetchingHeroesRef.current.add(heroId);
+    
+    // Clear error state
+    setErrorHeroes((prevErrors) => {
+      const newErrors = { ...prevErrors };
+      delete newErrors[heroId];
+      return newErrors;
+    });
+
+    // Set loading state
+    setLoadingHeroes((prevLoading) => {
+      const newLoading = new Set(prevLoading);
+      newLoading.add(heroId);
+      return newLoading;
+    });
+
+    try {
+      // Fetch hero data using tRPC query
+      const data = await queryClient.fetchQuery(["get-hero-by-id", { id: heroId }]);
+      const apiResponse = data as SuperHeroApiResponse;
+      
+      // Check if API response is valid
+      if (apiResponse.response === "error") {
+        throw new Error(apiResponse.error || "Hero not found");
+      }
+      
+      const biographyData = extractBiographyData(apiResponse);
+      
+      // Cache the data
+      setHeroDataCache((prevCache) => ({
+        ...prevCache,
+        [heroId]: biographyData,
+      }));
+    } catch (error: unknown) {
+      // Handle error with user-friendly messages
+      let errorMessage = "Failed to fetch hero data";
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      }
+      
+      // Provide user-friendly error messages
+      if (errorMessage.includes("fetch") || errorMessage.includes("network")) {
+        errorMessage = "Network error. Please check your connection.";
+      } else if (errorMessage.includes("not found") || errorMessage.includes("404")) {
+        errorMessage = "Hero data not available.";
+      }
+      
+      setErrorHeroes((prevErrors) => ({
+        ...prevErrors,
+        [heroId]: errorMessage,
+      }));
+    } finally {
+      // Clear fetching flag
+      fetchingHeroesRef.current.delete(heroId);
+      
+      // Clear loading state
+      setLoadingHeroes((prevLoading) => {
+        const newLoading = new Set(prevLoading);
+        newLoading.delete(heroId);
+        return newLoading;
+      });
+    }
+  }, [queryClient]);
 
   const filteredHeroes = heroRatings.filter((hero) => {
     if (!showProvisional && hero.isProvisional) return false;
@@ -235,12 +574,43 @@ const Results: React.FC<{
     }
   });
 
+  // Dynamic row height estimation based on expansion state
+  // Floating cards have margin (my-2 = 16px total) so base height is ~88px
+  const estimateSize = useCallback((index: number) => {
+    const hero = sortedHeroes[index];
+    if (!hero) return 88;
+
+    // If hero is expanded, return estimated expanded height (including margins)
+    // Otherwise return collapsed height with margins (~88px)
+    return expandedHeroIds.has(hero.heroId) ? 280 : 88;
+  }, [sortedHeroes, expandedHeroIds]);
+
   const rowVirtualizer = useVirtualizer({
     count: sortedHeroes.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 72,
+    estimateSize,
     overscan: 10,
+    // Enable measurement of actual element sizes for accurate heights
+    measureElement: (element) => element?.getBoundingClientRect().height ?? 88,
   });
+
+  // Force re-measurement when expansion state changes
+  useEffect(() => {
+    // Trigger re-measurement for all visible virtual items when expansion state changes
+    // This ensures the virtualizer recalculates heights after rows expand/collapse
+    // Use a small timeout to ensure DOM has updated after state change
+    const timeoutId = setTimeout(() => {
+      const virtualItems = rowVirtualizer.getVirtualItems();
+      virtualItems.forEach((virtualItem) => {
+        const element = parentRef.current?.querySelector(`[data-index="${virtualItem.index}"]`) as HTMLElement;
+        if (element) {
+          rowVirtualizer.measureElement(element);
+        }
+      });
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
+  }, [expandedHeroIds, rowVirtualizer]);
 
   return (
     <div className="min-h-screen">
@@ -366,27 +736,10 @@ const Results: React.FC<{
         </div>
       </div>
 
-      {/* Table Header */}
-      <div className="border-b-2 border-ink bg-ink text-paper">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center gap-2 sm:gap-3 py-1 px-2 sm:px-3 font-mono text-xs">
-            <div className="w-10 sm:w-12 text-center">#</div>
-            <div className="w-10 sm:w-12"></div>
-            <div className="flex-1">HERO</div>
-            <div className="w-16 text-right">RATING</div>
-            <div className="hidden md:block w-16 text-center">RECORD</div>
-            <div className="hidden md:block w-14 text-center">WIN%</div>
-            <div className="hidden md:block w-14 text-center">GAMES</div>
-            <div className="hidden md:block w-12 text-center">STREAK</div>
-            <div className="hidden md:block w-16 text-center">WILSON</div>
-          </div>
-        </div>
-      </div>
-
       {/* Rankings List */}
-      <main className="max-w-6xl mx-auto">
+      <main className="max-w-6xl mx-auto px-2 sm:px-4 py-4">
         {sortedHeroes.length === 0 ? (
-          <div className="text-center py-12 border-b-2 border-ink">
+          <div className="text-center py-12 floating-card">
             <p className="font-display text-xl text-charcoal">NO HEROES FOUND</p>
             <p className="font-mono text-sm text-smoke mt-2">
               {heroRatings.length === 0 ? "Start voting to see rankings" : "Try adjusting filters"}
@@ -396,7 +749,7 @@ const Results: React.FC<{
           <div
             ref={parentRef}
             className="scroll-brutal overflow-auto"
-            style={{ height: "calc(100vh - 280px)", minHeight: "400px" }}
+            style={{ height: "calc(100vh - 300px)", minHeight: "400px" }}
           >
             <div
               style={{
@@ -412,6 +765,13 @@ const Results: React.FC<{
                 return (
                   <div
                     key={virtualRow.key}
+                    data-index={virtualRow.index}
+                    ref={(element) => {
+                      // Measure element when it mounts or updates
+                      if (element) {
+                        rowVirtualizer.measureElement(element);
+                      }
+                    }}
                     style={{
                       position: "absolute",
                       top: 0,
@@ -424,6 +784,12 @@ const Results: React.FC<{
                     <RankingRow
                       hero={hero}
                       rank={virtualRow.index + 1}
+                      isExpanded={expandedHeroIds.has(hero.heroId)}
+                      onClick={() => handleHeroClick(hero.heroId)}
+                      biography={heroDataCache[hero.heroId] ?? null}
+                      isLoading={loadingHeroes.has(hero.heroId)}
+                      error={errorHeroes[hero.heroId] ?? null}
+                      onRetry={() => retryHeroFetch(hero.heroId)}
                     />
                   </div>
                 );
