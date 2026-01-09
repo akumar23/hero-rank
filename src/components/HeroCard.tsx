@@ -136,12 +136,17 @@ export const HeroCard: React.FC<HeroCardProps> = ({
     }
   };
 
-  // Keyboard handler
+  // Keyboard handler - mirrors handleCardClick behavior
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      // Toggle biography on all devices
-      setShowBiography((prev) => !prev);
+      // On mobile (non-hover devices), toggle biography
+      // On desktop (hover devices), trigger vote
+      if (!isHoverDevice) {
+        setShowBiography((prev) => !prev);
+      } else {
+        onVote();
+      }
     } else if (e.key === "Escape" && showBiography) {
       setShowBiography(false);
     }
@@ -204,7 +209,13 @@ export const HeroCard: React.FC<HeroCardProps> = ({
       tabIndex={0}
       role="button"
       aria-expanded={showBiography}
-      aria-label={showBiography ? "Hide biography" : "Show biography"}
+      aria-label={
+        isHoverDevice
+          ? `Vote for ${heroName || "hero"}`
+          : showBiography
+            ? `Hide biography for ${heroName || "hero"}`
+            : `Show biography for ${heroName || "hero"}`
+      }
     >
       {/* Hero Image */}
       <div className="border-2 border-ink border-b-0 bg-concrete flex-shrink-0 relative">
