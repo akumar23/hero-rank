@@ -24,7 +24,7 @@ import {
   addDiscoveredHeroes,
 } from "../components/DiscoveryTracker";
 import { useQueryClient } from "react-query";
-import { HeroCardContainer } from "../components/HeroCardContainer";
+import { HeroCard } from "../components/HeroCard";
 import { extractBiographyData, type SuperHeroApiResponse } from "../types/heroBiography";
 
 export default function Home() {
@@ -180,7 +180,7 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 mb-6">
             {/* Hero 1 */}
             <div key={id1} className="animate-entrance-left">
-              <HeroCardContainer
+              <HeroCard
                 heroUrl={hero1Url}
                 heroName={hero1Name}
                 heroId={id1}
@@ -202,7 +202,7 @@ export default function Home() {
 
             {/* Hero 2 */}
             <div key={id2} className="animate-entrance-right">
-              <HeroCardContainer
+              <HeroCard
                 heroUrl={hero2Url}
                 heroName={hero2Name}
                 heroId={id2}
@@ -214,13 +214,13 @@ export default function Home() {
           </div>
         ) : (
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 mb-6">
-            <div className="w-56 h-[300px] border-2 border-ink bg-concrete flex items-center justify-center">
+            <div className="w-72 h-[340px] border-2 border-ink bg-concrete flex items-center justify-center">
               <span className="font-mono text-smoke">Loading...</span>
             </div>
             <div className="bg-signal text-paper border-2 border-ink shadow-brutal px-3 py-1 text-display text-3xl -rotate-3">
               VS
             </div>
-            <div className="w-56 h-[300px] border-2 border-ink bg-concrete flex items-center justify-center">
+            <div className="w-72 h-[340px] border-2 border-ink bg-concrete flex items-center justify-center">
               <span className="font-mono text-smoke">Loading...</span>
             </div>
           </div>
